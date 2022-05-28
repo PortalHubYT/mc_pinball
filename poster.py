@@ -2,6 +2,7 @@ import asyncio
 import sys
 from os import environ
 import txaio
+
 txaio.use_asyncio()
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
 
@@ -9,6 +10,7 @@ from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
 import mcapi as mc
 
 verbose = False
+
 
 class Poster(ApplicationSession):
     async def onJoin(self, details):
@@ -26,11 +28,11 @@ class Poster(ApplicationSession):
                     print(ret)
             return ret
 
-        await self.register(post, 'minecraft.post')
+        await self.register(post, "minecraft.post")
         print("Registered: minecraft.post.")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     args = sys.argv[1:]
     for a in args:

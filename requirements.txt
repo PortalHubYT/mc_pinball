@@ -1,0 +1,8 @@
+
+txaio
+mcstatus
+docker
+mctools
+pillow
+autobahn
+tinydb
