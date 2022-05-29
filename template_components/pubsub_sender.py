@@ -3,7 +3,7 @@ from os import environ
 import txaio
 txaio.use_asyncio()
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
-
+import gamestate
 
 
 class Component(ApplicationSession):
@@ -12,6 +12,7 @@ class Component(ApplicationSession):
     """
 
     async def onJoin(self, details):
+        self.gamestate = await gamestate.create(self)
         counter = 0
         while True:
             print("publish: com.myapp.topic1", counter)
