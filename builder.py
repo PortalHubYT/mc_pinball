@@ -6,78 +6,145 @@ txaio.use_asyncio()
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
 
 import mcapi as mc
-from random import randrange
+from random import randrange, choice
 from math import floor
+import pickle
+import gamestate
 
 
 class Builder(ApplicationSession):
     async def onJoin(self, details):
+        self.env = await gamestate.create(self)
 
-        self.board = Board()
+        ## BOARD ##
 
-        def board_constructer():
+        self.board = Board(self.env)
+        self.arena = Arena(self.board)
+
+        # Variable args to handle console input construct as well as change of env
+        def board_constructer(*args):
+            board_deconstructer()
+
             instructions = self.board.construct()
             for cmd in instructions:
                 self.call("minecraft.post", cmd)
 
+            self.arena = Arena(self.board)
+            arena_constructer()
+
         def board_deconstructer():
+            arena_deconstructer()
+
             instructions = self.board.deconstruct()
             for cmd in instructions:
                 self.call("minecraft.post", cmd)
 
-        def board_editor(key, value):
-            self.board.edit(key, value)
+        def board_editor(key, value, mod):
+            self.call("gamestate.write", "builder", key, value, mod)
 
-        def board_reader(info):
-            return self.board.read(info)
+        # This should read attributes of Board instead or bonus
+        def board_reader(key):
+            return self.call("gamestate.read", "builder", key)
 
-        await self.subscribe(board_constructer, "construct")
-        await self.subscribe(board_deconstructer, "deconstruct")
-        await self.register(board_editor, "edit")
-        await self.register(board_reader, "read")
+        def board_getter():
+            return pickle.dumps(self.board)
+
+        await self.register(board_constructer, "board.construct")
+        await self.register(board_deconstructer, "board.deconstruct")
+        await self.register(board_editor, "board.edit")
+        await self.register(board_reader, "board.read")
+        await self.register(board_getter, "board.get")
+
+        ## ARENA ##
+
+        def arena_constructer():
+
+            arena_deconstructer()
+            instructions = self.arena.construct()
+            for cmd in instructions:
+                self.call("minecraft.post", cmd)
+
+        def arena_deconstructer():
+            instructions = self.arena.deconstruct()
+            for cmd in instructions:
+                self.call("minecraft.post", cmd)
+
+        def arena_peg_placer(x, y):
+            arena_peg_remover(x, y)
+            instructions = self.arena.replace_tile(Peg(x, y))
+            for instruction in instructions:
+                for cmd in instruction["list"]:
+                    self.call("minecraft.post", cmd)
+
+        def arena_peg_line_placer(y, spacing, limit=None):
+            arena_peg_line_remover(y)
+            instructions = self.arena.place_line_peg(y, spacing, limit)
+            for instruction in instructions:
+                for cmd in instruction["list"]:
+                    self.call("minecraft.post", cmd)
+
+        def arena_peg_remover(x, y):
+            instructions = self.arena.remove_tile(x, y, Peg)
+            for instruction in instructions:
+                for cmd in instruction["list"]:
+                    self.call("minecraft.post", cmd)
+
+        def arena_peg_line_remover(y):
+            instructions = self.arena.remove_tile_line(y, Peg)
+            for instruction in instructions:
+                for cmd in instruction["list"]:
+                    self.call("minecraft.post", cmd)
+
+        await self.register(arena_peg_placer, "arena.place_peg")
+        await self.register(arena_peg_line_placer, "arena.place_peg_line")
+        await self.register(arena_peg_line_remover, "arena.remove_peg_line")
+        await self.register(arena_peg_remover, "arena.remove_peg")
+        await self.register(arena_constructer, "arena.construct")
+        await self.register(arena_deconstructer, "arena.deconstruct")
+
+        await self.subscribe(board_constructer, "gamestate.sync")
 
     def onDisconnect(self):
         asyncio.get_event_loop().stop()
 
 
 class Board:
-    def __init__(self):
+    def __init__(self, env):
 
-        self.env = {
-            "origin": mc.BlockCoordinates(0, 4, 0),
-            "width": 68,
-            "height": 46,
-            "depth": 2,
-            "bouncer_offset": 4,
-            "peg_block": mc.Block("sea_lantern"),
-            "play_area_block": mc.Block("air"),
-            "front_wall_block": mc.Block("barrier"),
-            "back_wall_block": mc.Block("barrier"),
-            "background_block": mc.Block("red_concrete"),
-            "cover_block": mc.Block("smooth_quartz"),
-            "bottom_bar_block": mc.Block("smooth_quartz"),
-            "right_bouncer_block": mc.Block("repeating_command_block"),
-            "right_wall_block": mc.Block("air"),
-            "right_cover_block": mc.Block("oak_trapdoor"),
-            "left_bouncer_block": mc.Block("repeating_command_block"),
-            "left_wall_block": mc.Block("air"),
-            "left_cover_block": mc.Block("oak_trapdoor"),
-        }
+        self.env = env
 
         self.compute_coords()
 
     def compute_coords(self):
-        self.origin = self.env["origin"]
 
-        self.depth = self.env["depth"]
-        self.height = self.env["height"]
-        self.width = self.env["width"]
+        self.x1 = self.env.origin_x
+        self.y1 = self.env["origin_y"]
+        self.z1 = self.env["origin_z"]
 
-        self.x1, self.y1, self.z1 = self.origin.set
+        self.x2 = self.x1 + self.env["depth"] - 1
+        self.y2 = self.y1 + self.env["height"] - 1
+        self.z2 = self.z1 + self.env["width"] - 1
 
-        self.x2 = self.x1 + self.depth - 1
-        self.y2 = self.y1 + self.height - 1
-        self.z2 = self.z1 + self.width - 1
+        self.board_zone = mc.Zone(
+            (self.x1, self.y1, self.z1), (self.x2, self.y2, self.z2)
+        )
+
+        self.play_zone = mc.Zone(
+            (self.x1, self.y1, self.z1), (self.x1, self.y2, self.z2)
+        )
+
+        self.peg_zone = mc.Zone(
+            (
+                self.x1,
+                self.y1 + self.env["bottom_offset"],
+                self.z1 + self.env["side_offset"],
+            ),
+            (
+                self.x1,
+                self.y2 - self.env["top_offset"],
+                self.z2 - self.env["side_offset"],
+            ),
+        )
 
     def deconstruct(self):
         cmds = []
@@ -99,13 +166,12 @@ class Board:
     def construct(self):
 
         instructions = []
-        instructions.extend(self.deconstruct())
 
         self.compute_coords()
 
         structures = [
             self.make_cover,
-            self.make_play_area,
+            self.make_hollow_area,
             self.make_front_wall,
             self.make_back_wall,
             self.make_background,
@@ -126,83 +192,6 @@ class Board:
 
         return instructions
 
-    def edit(self, key, value):
-
-        if key not in self.env:
-            print(f"{key} is not a valid key in the board environment")
-            return
-
-        if type(self.env[key]) is int:
-            self.env[key] = int(value)
-        elif type(self.env[key]) is mc.Block:
-            self.env[key].id = value
-        elif type(self.env[key]) is mc.BlockCoordinates:
-            self.env[key].x = value.split(",")[0]
-            self.env[key].y = value.split(",")[1]
-            self.env[key].z = value.split(",")[2]
-
-        self.compute_coords()
-
-    def read(self, key):
-        return self.env[key]
-
-    def place_peg(self, x, y):
-
-        cmds = []
-
-        x1, y1, z1 = (self.x1, x, y)
-        x2 = self.x2
-
-        # Peg repulsion handler
-        peg_block = mc.Block(
-            "repeating_command_block",
-            nbt=mc.NBT(
-                {
-                    "Command": f"execute if entity @e[x={x1}, y={y1 - 2}, z={z1 - 2}, dx={x2}, dy=3, dz=3] run summon minecraft:tnt ~-{self.env['depth'] - 1 / 2} ~ ~ "
-                    + "{Fuse:0b}",
-                    "auto": 1,
-                }
-            ),
-            blockstate=mc.BlockState({"facing": "east"}),
-        )
-
-        coords = mc.BlockCoordinates(x2 + 2, y1, z1)
-        cmds.append(mc._set_block(coords, peg_block, "replace"))
-
-        # Peg particle handler
-        particle_block = mc.Block(
-            "chain_command_block",
-            nbt=mc.NBT(
-                {
-                    "Command": "particle minecraft:crit ~-3 ~ ~ 0.5 0.6 0.6 0.05 250 force",
-                    "auto": 1,
-                }
-            ),
-            blockstate=mc.BlockState({"conditional": True, "facing": "east"}),
-        )
-
-        coords = mc.BlockCoordinates(x2 + 3, y1, z1)
-        cmds.append(mc._set_block(coords, particle_block, "replace"))
-
-        # Peg hitbox
-        zone = mc.Zone((x1, y1 - 1, z1), (x2, y1 - 1, z1))
-        cmds.append(mc._set_zone(zone, mc.Block("barrier"), "replace"))
-
-        # Peg decoration block
-        zone = mc.Zone((x2 + 1, y1 + 1, z1 - 1), (x2 + 1, y1 - 1, z1 + 1))
-        cmds.append(mc._set_zone(zone, self.env["peg_block"], "replace"))
-
-        return cmds
-
-    def place_line_peg(self, y, distance=8):
-        pegs = floor(width / distance)
-        spacing = floor((pegs * distance) / pegs)
-
-        width = 20
-
-    def generate_pegs(self):
-        pass
-
     def make_cover(self):
         self.cover = {
             "zone": mc.Zone(
@@ -215,15 +204,17 @@ class Board:
         cmds = mc._set_zone(self.cover["zone"], self.cover["block"], "replace")
         return cmds
 
-    def make_play_area(self):
-        self.play_area = {
+    def make_hollow_area(self):
+        self.hollow_area = {
             "zone": mc.Zone(
                 (self.x1, self.y1 - 4, self.z1 - 2), (self.x2, self.y2 + 2, self.z2 + 2)
             ),
-            "block": self.env["play_area_block"],
+            "block": self.env["hollow_area_block"],
         }
 
-        cmds = mc._set_zone(self.play_area["zone"], self.play_area["block"], "replace")
+        cmds = mc._set_zone(
+            self.hollow_area["zone"], self.hollow_area["block"], "replace"
+        )
         return cmds
 
     def make_front_wall(self):
@@ -274,11 +265,17 @@ class Board:
             "zone": mc.Zone(
                 (self.x2 + 2, self.y1 - 4, self.z1), (self.x2 + 2, self.y2, self.z2)
             ),
-            "block": self.env["background_block"].id.replace(
-                "red" if "concrete" in self.env["background_block"].id else "",
-                colors[color],
-            ),
+            "block": self.env["background_block"],
         }
+
+        colored_block_list = ["minecraft:white_wool", "minecraft:white_concrete"]
+        if str(self.background["block"]) in colored_block_list:
+            self.background["block"] = mc.Block(
+                self.background["block"].replace(
+                    "white",
+                    colors[color],
+                )
+            )
 
         cmds = mc._set_zone(
             self.background["zone"], self.background["block"], "replace"
@@ -301,9 +298,8 @@ class Board:
 
     def make_right_bouncer(self):
 
-        block = self.env["right_bouncer_block"].id
         block = mc.Block(
-            block,
+            self.env["right_bouncer_block"],
             nbt=mc.NBT(
                 {
                     "Command": 'execute if entity @e[distance=..3] run summon minecraft:tnt ~ ~-0.5 ~-1 {"fuse":0}',
@@ -339,8 +335,7 @@ class Board:
 
     def make_right_cover(self):
 
-        block = self.env["right_cover_block"].id
-        block = mc.Block(block)
+        block = mc.Block(self.env["right_cover_block"])
 
         block.blockstate = mc.BlockState(
             {"facing": "north", "half": "bottom", "open": "true"}
@@ -367,9 +362,8 @@ class Board:
 
     def make_left_bouncer(self):
 
-        block = self.env["left_bouncer_block"].id
         block = mc.Block(
-            block,
+            self.env["left_bouncer_block"],
             nbt=mc.NBT(
                 {
                     "Command": 'execute if entity @e[distance=..3] run summon minecraft:tnt ~ ~-0.5 ~1 {"fuse":0}',
@@ -403,8 +397,7 @@ class Board:
 
     def make_left_cover(self):
 
-        block = self.env["left_cover_block"].id
-        block = mc.Block(block)
+        block = mc.Block(self.env["left_cover_block"])
 
         block.blockstate = mc.BlockState(
             {"facing": "south", "half": "bottom", "open": "true"}
@@ -434,6 +427,208 @@ class Board:
             self.bottom_bar["zone"], self.bottom_bar["block"], "replace"
         )
         return cmds
+
+
+class Arena:
+    def __init__(self, board):
+        self.board = board
+
+        x = self.board.play_zone.pos2.y + 1
+        y = self.board.play_zone.pos2.z + 1
+
+        self.plate = []
+
+        for i in range(x):
+            self.plate.append([])
+            for j in range(y):
+                self.plate[i].append(Empty(i, j))
+
+    def deconstruct(self):
+        return []
+
+    def construct(self):
+        return []
+
+    def replace_tile(self, tile):
+
+        cmds = []
+
+        x = tile.x
+        y = tile.y
+        tile.board = self.board
+
+        old_tile = self.plate[x][y]
+        cmd = old_tile.remove()
+        cmds.extend(cmd)
+
+        self.plate[x][y] = tile
+        cmd = tile.place()
+        cmds.extend(cmd)
+
+        return cmds
+
+    def remove_tile_line(self, y, type=None):
+        cmds = []
+
+        for i in range(len(self.plate[y])):
+            cmds.extend(self.remove_tile(y, i, type))
+
+        return cmds
+
+    def remove_tile(self, x, y, type=None):
+        cmds = []
+
+        if isinstance(self.plate[x][y], type) or type == None:
+
+            cmd = self.replace_tile(Empty(x, y))
+            cmds.extend(cmd)
+
+        return cmds
+
+    def place_line_peg(self, y, spacing=8, limit=None, even_policy="random"):
+
+        cmds = []
+
+        peg_line = []
+
+        width = len(self.plate[0]) - self.board.env["side_offset"] * 2
+
+        i = 0
+        n_to_place = 0
+        while i + spacing < width:
+            i += spacing
+            n_to_place += 1
+            if limit and n_to_place >= limit:
+                break
+
+        rest = width - i
+        left_padding = floor(rest / 2)
+        right_padding = left_padding
+
+        if rest % 2:
+            if even_policy == "random":
+                if choice([0, 1]):
+                    left_padding += 1
+                else:
+                    right_padding += 1
+            elif even_policy == "left":
+                left_padding += 1
+            elif even_policy == "right":
+                right_padding += 1
+
+        for _ in range(left_padding):
+            peg_line.append(Empty(y, len(peg_line) + self.board.env["side_offset"]))
+
+        for _ in range(n_to_place):
+            peg_line.append(Peg(y, len(peg_line) + self.board.env["side_offset"]))
+            for _ in range(spacing - 1):
+                peg_line.append(Empty(y, len(peg_line) + self.board.env["side_offset"]))
+
+        peg_line.append(Peg(y, len(peg_line) + self.board.env["side_offset"]))
+
+        for _ in range(left_padding):
+            peg_line.append(Empty(y, len(peg_line) + self.board.env["side_offset"]))
+
+        cmds = []
+        for tile in peg_line:
+            cmd = self.replace_tile(tile)
+            cmds.extend(cmd)
+
+        return cmds
+
+
+class Tile:
+    def __init__(self, x, y, board=None):
+        self.board = board
+        self.x = x
+        self.y = y
+
+    def remove(self):
+        cmds = []
+
+        if self.__dir__():
+            for attr in self.__dir__():
+                obj = getattr(self, attr)
+                if type(obj) is dict:
+                    if "replace" in obj:
+                        block = obj["replace"]
+                    else:
+                        block = mc.Block("air")
+
+                    if "coords" in obj:
+                        cmds.append(mc._set_block(obj["coords"], block, "replace"))
+                    elif "zone" in obj:
+                        cmds.append(mc._set_zone(obj["zone"], block, "replace"))
+
+        return cmds
+
+
+class Peg(Tile):
+    def place(self):
+
+        cmds = []
+
+        x1, y1, z1 = (self.board.x1, self.x, self.y)
+        x2 = self.board.x2
+
+        # Peg repulsion handler
+        peg_block = mc.Block(
+            "repeating_command_block",
+            nbt=mc.NBT(
+                {
+                    "Command": f"execute if entity @e[x={x1}, y={y1 - 2}, z={z1 - 2}, dx={x2}, dy=3, dz=3] run summon minecraft:tnt ~-{self.board.env['depth'] - 1 / 2} ~ ~ "
+                    + "{Fuse:0b}",
+                    "auto": 1,
+                }
+            ),
+            blockstate=mc.BlockState({"facing": "east"}),
+        )
+
+        coords = mc.BlockCoordinates(x2 + 2, y1, z1)
+
+        self.peg_block = {
+            "block": peg_block,
+            "coords": coords,
+            "replace": self.board.env["background_block"],
+        }
+        cmds.append(mc._set_block(coords, peg_block, "replace"))
+
+        # Peg particle handler
+        particle_block = mc.Block(
+            "chain_command_block",
+            nbt=mc.NBT(
+                {
+                    "Command": "particle minecraft:crit ~-3 ~ ~ 0.5 0.6 0.6 0.05 250 force",
+                    "auto": 1,
+                }
+            ),
+            blockstate=mc.BlockState({"conditional": True, "facing": "east"}),
+        )
+
+        coords = mc.BlockCoordinates(x2 + 3, y1, z1)
+        self.particle_block = {"block": particle_block, "coords": coords}
+        cmds.append(mc._set_block(coords, particle_block, "replace"))
+
+        # Peg hitbox
+        zone = mc.Zone((x1, y1 - 1, z1), (x2, y1 - 1, z1))
+        self.peg_hitbox = {"block": mc.Block("barrier"), "zone": zone}
+        cmds.append(mc._set_zone(zone, mc.Block("barrier"), "replace"))
+
+        # Peg decoration block
+        zone = mc.Zone((x2 + 1, y1 + 1, z1 - 1), (x2 + 1, y1 - 1, z1 + 1))
+        self.peg_decoration = {
+            "block": self.board.env["peg_block"],
+            "zone": zone,
+            "replace": self.board.env["back_wall_block"],
+        }
+        cmds.append(mc._set_zone(zone, self.board.env["peg_block"], "replace"))
+
+        return cmds
+
+
+class Empty(Tile):
+    def place(self):
+        return []
 
 
 if __name__ == "__main__":

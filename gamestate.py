@@ -20,22 +20,24 @@ class GameState(object):
     def __repr__(self):
         return self._state.__repr__()
     
-    def __getitem__(self, k):
-        return self._state[k]
+    
     def __setitem__(self, k, v):
         self._state[k] = v
         self._publish("gamestate.sync_needed", self._state)
+        self._publish(f"gamestate.{k}", v)
         
-    def __getattr__(self, k):
-        return self._state[k]
-    
     def __setattr__(self, k, v):
         if k == "_state" or k == "_publish":
             super().__setattr__(k, v)
         else:
             self._state[k] = v
             self._publish("gamestate.sync_needed", self._state)
+            self._publish(f"gamestate.{k}", v)
             
+    def __getattr__(self, k):
+        return self._state[k]
+    def __getitem__(self, k):
+        return self._state[k]
             
     def sync(self, new_state):
         # print(f"sync:\n{str(self._state).ljust(20)}    ->>   {new_state}")

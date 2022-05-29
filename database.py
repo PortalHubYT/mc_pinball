@@ -5,8 +5,15 @@ import txaio
 txaio.use_asyncio()
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
 
+import datetime
+import json
 import sqlite3
+import time
+from pyats.datastructures import AttrDict
 from sqlite3 import Error
+
+
+GAMESTATE = 1
 
 class Database(ApplicationSession):
     async def onJoin(self, details):
@@ -14,29 +21,98 @@ class Database(ApplicationSession):
         self.conn = self.create_connection()
         self.cursor = self.conn.cursor()
         self.execute = self.cursor.execute
-        self.types = {"display_name": "TEXT",
-                            "username": "TEXT",
-                            "alive": "INTEGER",
-                            "current_alive":"INTEGER",
-                            "best_alive": "INTEGER",
-                            "last_checked": "INTEGER",
-                            }
-        self.schema = [ name for name in self.types]
+        self.tables = {
+            "players": {
+                "types": {
+                    # "id": "INTEGER PRIMARY KEY",
+                    "display_name": "TEXT",
+                    "username": "TEXT",
+                    "alive": "INTEGER",
+                    "current_alive":"INTEGER",
+                    "best_alive": "INTEGER",
+                    "last_checked": "INTEGER",
+                    "channel_id": "TEXT",
+                },
+                "schema": None,
+            },
+            "gamestates": {
+                "types": {
+                    "id": "INTEGER PRIMARY KEY",
+                    "blob": "BLOB",
+                    "timestamp": "INTEGER",
+                },
+                "schema": None,
+            }
+        }
         
-        # a = self.create_player()
-        # a = self.create_player()
-        # a = self.create_player()
-        # a = self.create_player()
-        # a = self.create_player()
-        # a = self.create_player()
-
-        await self.register(self.reset_all, "data.delete_everything")
+        for table in self.tables:
+            self.tables[table]["schema"] = [ field for field in self.tables[table]['types']]
+            self.ensure_table(table)
+        
+        await self.register(self.player_reset_all, "data.delete_everything")
         await self.register(self.create_player, "data.create_player")
-        await self.register(self.read_id, "data.read_id")
-        await self.register(self.update_id, "data.update_id")
-        await self.register(self.delete_id, "data.delete_id")
+        await self.register(self.player_read_id, "data.player_read_id")
+        await self.register(self.player_update_id, "data.update_id")
+        await self.register(self.player_delete_id, "data.delete_id")
         
-    def update_id(self, id, data):
+        await self.subscribe(self.gamestate_sync_needed, "gamestate.sync_needed")
+        
+    ####################################
+    ##           GAMESTATE            ##
+    ##                                ##
+    ####################################
+    def gamestate_sync_needed(self, data):
+        
+        if data:
+            self.write_gamestate(data)            
+        else:
+            data = self.load_gamestate()
+        
+        self.gamestate_send_sync(data)
+    
+    def gamestate_send_sync(self, data):
+        if not data:
+            print("WOWOWOW WTF")
+            pass
+        else:
+            self.publish("gamestate.sync", data)
+        
+    def write_gamestate(self, data):
+        
+        cmd = f"UPDATE gamestates SET blob = (?) WHERE id = {GAMESTATE};"
+        # print(cmd)
+        ret = self.execute(cmd, (json.dumps(data).encode('utf-8'),))
+        retdeu = ret.fetchall()
+        # print(retdeu)
+        self.conn.commit()
+        
+        
+        cmd = f"UPDATE gamestates SET timestamp = {int(time.time())} WHERE id = {GAMESTATE};"
+        # print(cmd)
+        ret = self.execute(cmd).fetchall()
+        # print(ret)
+        ret = self.conn.commit()
+        # print(ret)
+        
+        print("\n/-------------------------------\\")
+        self.print_table("gamestates")
+        print("\\-------------------------------/\n")
+        
+    def load_gamestate(self):
+        row = self.read_id(GAMESTATE, 'gamestates')
+        
+        data = AttrDict(json.loads(row['blob']))
+        if not data:
+            print("COUPABLE load")
+        
+        return data
+        
+
+    ####################################
+    ##            PLAYERS             ##
+    ##                                ##
+    ####################################
+    def player_update_id(self, id, data):
         for item in data:
             if isinstance(data[item], str):
                 value = f"'{data[item]}'"
@@ -45,16 +121,9 @@ class Database(ApplicationSession):
             self.execute(f"UPDATE players SET {item} = {value} WHERE id = {id}")
         self.conn.commit()
     
-    def read_id(self, id):
-        data = {}
-        schema = ["display_name", "username", "best_alive", "alive", "last_checked", "current_alive"]
-        
-        cmd = f"SELECT {', '.join(schema)} FROM players WHERE id = {id}"
-        cursor = self.execute(cmd)
-        for item in cursor:
-            for i, field in enumerate(item):
-                data[schema[i]] = field
-        return data                
+    def player_read_id(self, id):
+        return self.read_id(id, 'players')
+      
 
     def print_table(self, table="players"):
         cmd = f"SELECT * FROM {table}"
@@ -62,13 +131,13 @@ class Database(ApplicationSession):
         for entry in ret:
             print(entry)
 
-    def reset_all(self, confirmation):
+    def player_reset_all(self, confirmation):
         if confirmation == "please nuke":
             cmd = f"DELETE FROM players WHERE id"
             print(cmd)
             self.execute(cmd)
         
-    def delete_id(self, id):
+    def player_delete_id(self, id):
         cmd = f"DELETE FROM players WHERE id = {id}"
         self.execute(cmd)
         self.conn.commit()
@@ -94,29 +163,45 @@ class Database(ApplicationSession):
         c = self.execute(cmd)
         self.conn.commit()
         return c.lastrowid
+   
+    ####################################
+    ##              MISC             ##
+    ##                                ##
+    ####################################
+    def read_id(self, id, table):
+        data = {}
+        cmd = f"SELECT {', '.join(self.tables[table]['schema'])} FROM {table} WHERE id = {id}"
         
-    def ensure_table(self):
-        cmd = f"PRAGMA table_info(players)"
+        cursor = self.execute(cmd)
+        for item in cursor:
+            for i, field in enumerate(item):
+                data[self.tables[table]['schema'][i]] = field
+        print("ABOUT TO RETURN:", data)                
+        return data              
+        
+    
+    def ensure_table(self, table):
+        cmd = f"PRAGMA table_info({table})"
         current_table = self.execute(cmd).fetchall()
         
         if not current_table:
-            self.create_table()
+            self.create_table(table)
         
         current_table_fields = [field[1] for field in current_table]
         
-        for field in self.schema:
+        for field in self.tables[table]['schema']:
             if field not in current_table_fields:
-                cmd = f"ALTER TABLE players ADD COLUMN {field}"
+                cmd = f"ALTER TABLE {table} ADD COLUMN {field}"
                 print(cmd)
                 self.execute(cmd)
         
-    def create_table(self):
+    def create_table(self, table):
         formated_types = "("
-        for type in self.types:
-            formated_types = f"{formated_types}{type} {self.types[type]}, "
+        for type in self.tables[table]['types']:
+            formated_types = f"{formated_types}{type} {self.tables[table]['types'][type]}, "
         formated_types = formated_types[:-2]+")"
 
-        cmd = f"CREATE TABLE players {formated_types};"
+        cmd = f"CREATE TABLE {table} {formated_types};"
         self.execute(cmd)
 
     def create_connection(self):
@@ -126,6 +211,9 @@ class Database(ApplicationSession):
             return sqlite3.connect(f"db/{self.name}.db")
         except Error as e:
             print("Failed to connect to database: ", e)
+            
+    
+        
         
 
 if __name__ == "__main__":

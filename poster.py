@@ -6,19 +6,13 @@ import txaio
 txaio.use_asyncio()
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
 
-
 import mcapi as mc
-
 verbose = False
-
 
 class Poster(ApplicationSession):
     async def onJoin(self, details):
 
         mc.connect("localhost", "test")
-
-        def ping():
-            return
 
         def post(cmd):
             ret = mc.post(cmd)
@@ -33,7 +27,6 @@ class Poster(ApplicationSession):
 
 
 if __name__ == "__main__":
-
     args = sys.argv[1:]
     for a in args:
         if a == "-v":
