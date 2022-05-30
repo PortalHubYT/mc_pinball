@@ -11,6 +11,7 @@ import types
 import readline
 import re
 import gamestate
+import pickle
 from time import time
 from math import floor
 
@@ -77,7 +78,7 @@ class Console(ApplicationSession):
             except Exception:
                 print("""Requires 2 arguments: spacing and limit""")
 
-            await self.call("arena.tile.random", int(spacing), int(limit))
+            await self.call("builder.arena.tile.random", int(spacing), int(limit))
 
         async def board_query(*args):
             try:
@@ -161,16 +162,19 @@ class Console(ApplicationSession):
             await self.call("spawn.player.random", name)
 
         async def place_slime(*args):
+
             try:
                 x = int(args[0])
                 y = int(args[1])
                 if len(args) >= 3:
                     name = args[2]
+                await self.call("spawn.slime.place", int(x), int(y), "console", name)
             except Exception:
-                print("""Requires 2 arguments: x and y""")
-                return
-
-            await self.call("spawn.slime.place", int(x), int(y))
+                try:
+                    name = args[0]
+                    await self.call("spawn.slime.random", "console", name)
+                except Exception:
+                    await self.call("spawn.slime.random", "console")
 
         async def data_read_id(*args):
 
@@ -257,7 +261,7 @@ class Console(ApplicationSession):
                 },
                 "slime": {
                     "place": place_slime,
-                    "random": None,
+                    "random": place_slime,
                 },
             },
             "data": {
@@ -339,6 +343,11 @@ class Console(ApplicationSession):
                         link = place(cursor)
 
                     continue
+
+                elif cmd == "..":
+
+                    cursor.pop()
+                    link = place(cursor)
 
                 elif cmd == "help":
                     print(

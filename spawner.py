@@ -12,15 +12,15 @@ import pickle
 
 class Spawner(ApplicationSession):
     async def onJoin(self, details):
-        self.gs = await self.call('gamestate.get')
+        self.gs = await self.call("gamestate.get")
 
         def get_random_spawning_point():
-            x = random.randrange(0, self.gs.width - 1)
-            y = random.randrange(int(self.gs.height * 0.7), self.gs.height)
+            x = random.randrange(0, self.gs["width"] - 1)
+            y = random.randrange(int(self.gs["height"] * 0.7), self.gs["height"])
             return (x, y)
 
         def translate_coords(x, y):
-            return f"{(self.gs.origin_x + self.gs.depth) / 2} {y + self.gs.origin_y} {x + self.gs.origin_z}"
+            return f"{(self.gs['origin_x'] + self.gs['depth']) / 2} {y + self.gs['origin_y']} {x + self.gs['origin_z']}"
 
         async def spawn_slime(x, y, tag, display_name="dummy"):
             nbt = self.get_slime_nbt(display_name, tag)
@@ -28,9 +28,9 @@ class Spawner(ApplicationSession):
             cmd = f"summon minecraft:slime {coords} {nbt}"
             ret = await self.call("minecraft.post", cmd)
 
-        async def spawn_slime_random(tag, data):
+        async def spawn_slime_random(tag, display_name="dummy"):
             x, y = get_random_spawning_point()
-            await spawn_slime(x, y, tag, data)
+            await spawn_slime(x, y, tag, display_name)
 
         async def spawn_player_from_message(message):
             message = pickle.loads(message)
@@ -45,7 +45,7 @@ class Spawner(ApplicationSession):
 
             uid = await self.call("data.player.ensure_exists", player_data)
 
-            alives = await self.call("data.player.alives")
+            alives = await self.call("gamestate.alives.get")
 
             dead = True
             for alive in alives:
@@ -59,7 +59,7 @@ class Spawner(ApplicationSession):
 
             await spawn_slime_random(uid, player_data["display_name"])
             print(
-                f"o--> Spawning a player ({player_data['display_name']}) [{uuid}] from a message"
+                f"o--> Spawning a player ({player_data['display_name']}) [{uid}] from a message"
             )
 
         await self.register(spawn_slime, "spawn.slime.place")
@@ -116,6 +116,7 @@ class Spawner(ApplicationSession):
             }
         )
         return nbt
+
 
 if __name__ == "__main__":
     runner = ApplicationRunner("ws://127.0.0.1:8080/ws", "realm1")

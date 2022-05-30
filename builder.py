@@ -30,7 +30,7 @@ class Builder(ApplicationSession):
         await self.register(self.arena_line_remover, "builder.arena.tile.clear.line")
         await self.register(self.arena_grid_placer, "builder.arena.tile.grid")
         await self.register(self.arena_tile_remover, "builder.arena.tile.clear")
-        await self.register(self.arena_tile_random, "arena.tile.random")
+        await self.register(self.arena_tile_random, "builder.arena.tile.random")
         await self.register(self.arena_deconstructer, "builder.arena.clear")
 
         await self.subscribe(self.board_constructer, "gamestate.changed")
