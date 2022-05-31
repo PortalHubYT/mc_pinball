@@ -18,11 +18,14 @@ class Scheduler(ApplicationSession):
         i = 0
         while True:
             start = time()
+            # if not i % 2:
             self.publish("game.tick")
             print(str("*" * (i % 10)).ljust(10), end="")
             print(f"game.tick ", end="")
             i += 1
             await asyncio.sleep(self.wait_time)
+            if i % 120 == 0:
+                self.publish("data.commit")
             print(f"[Last {floor(time() - start)}s, expected {floor(self.wait_time)}s]")
 
 

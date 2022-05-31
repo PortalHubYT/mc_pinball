@@ -43,13 +43,13 @@ class Chat(ApplicationSession):
                     self.publish("chat.message", pickle.dumps(message))
 
         while True:
-            chat = pytchat.create(
-                video_id=self.stream_url, interruptable=False, hold_exception=False
-            )
             try:
+                chat = pytchat.create(
+                   video_id=self.stream_url, interruptable=False, hold_exception=False
+                )
                 chat_query()
-            except Exception as e:
-                print(e)
+            except:
+                print("Chat restaart")
 
 
 if __name__ == "__main__":

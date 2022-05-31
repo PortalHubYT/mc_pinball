@@ -31,8 +31,11 @@ class Builder(ApplicationSession):
         await self.register(self.arena_grid_placer, "builder.arena.tile.grid")
         await self.register(self.arena_tile_remover, "builder.arena.tile.clear")
         await self.register(self.arena_tile_random, "builder.arena.tile.random")
+        await self.register(
+            self.arena_replace_random, "builder.arena.tile.replace_random"
+        )
         await self.register(self.arena_deconstructer, "builder.arena.clear")
-
+        await self.subscribe(self.check_if_peg_message, "chat.message")
         await self.subscribe(self.board_constructer, "gamestate.changed")
         await self.register(self.load_default_env, "builder.default")
 
@@ -72,7 +75,6 @@ class Builder(ApplicationSession):
         for cmd in instructions:
             self.call("minecraft.post", cmd)
         self.call("minecraft.post", "execute as @e[type=!player] at @s run tp @s ~ 0 ~")
-
 
     def board_getter(
         self,
@@ -138,6 +140,18 @@ class Builder(ApplicationSession):
         for instruction in instructions:
             for cmd in instruction["list"]:
                 self.call("minecraft.post", cmd)
+
+    def arena_replace_random(self):
+        print(f"Replacing a random tiles at y")
+        instructions = self.arena.replace_random()
+        for instruction in instructions:
+            for cmd in instruction["list"]:
+                self.call("minecraft.post", cmd)
+
+    def check_if_peg_message(self, message):
+        message = pickle.loads(message)
+        if "peg" in "".join(s for s in message["messageEx"] if isinstance(s, str)):
+            self.arena_replace_random()
 
     def load_default_env(self):
         self.call("gamestate.update", default)
@@ -490,6 +504,58 @@ class Arena:
                 cmd = self.replace_tile(Empty(i, j))
                 cmds.extend(cmd)
 
+        return cmds
+
+    def replace_random(self):
+        def check_distance(coord, pegs, distance=4):
+            for peg in pegs:
+                if (
+                    abs(coord[0] - peg[0]) < distance
+                    and abs(coord[1] - peg[1]) < distance
+                ):
+                    return False
+
+            return True
+
+        pegs = []
+        for line in self.plate:
+            for tile in line:
+                if isinstance(tile, Peg):
+                    pegs.append(tile)
+
+        x1 = randrange(
+            0 + self.board.env["bottom_offset"],
+            len(self.plate) - self.board.env["top_offset"],
+        )
+        y1 = randrange(
+            0 + self.board.env["side_offset"],
+            len(self.plate[0]) - self.board.env["side_offset"],
+        )
+
+        pegs_as_coords = [(item.x, item.y) for item in pegs]
+        max_tries = 1000
+        tried = 0
+        while not check_distance((x1, y1), pegs_as_coords):
+            x1 = randrange(
+                0 + self.board.env["bottom_offset"],
+                len(self.plate) - self.board.env["top_offset"],
+            )
+            y1 = randrange(
+                0 + self.board.env["side_offset"],
+                len(self.plate[0]) - self.board.env["side_offset"],
+            )
+            tried += 1
+            if tried > max_tries:
+                break
+
+        chosen = randrange(0, len(pegs) - 1)
+
+        x2 = pegs[chosen].x
+        y2 = pegs[chosen].y
+
+        cmds = []
+        cmds.extend(self.replace_tile(Empty(x2, y2)))
+        cmds.extend(self.replace_tile(Peg(x1, y1)))
         return cmds
 
     def replace_tile(self, tile):

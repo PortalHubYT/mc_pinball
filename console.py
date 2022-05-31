@@ -80,6 +80,9 @@ class Console(ApplicationSession):
 
             await self.call("builder.arena.tile.random", int(spacing), int(limit))
 
+        async def peg_replace_random(*args):
+            await self.call("builder.arena.tile.replace_random")
+
         async def board_query(*args):
             try:
                 key = args[0]
@@ -200,30 +203,6 @@ class Console(ApplicationSession):
                 print(item)
             print(f"=====TOOK {floor(time() - start)} SECONDS=====")
 
-        async def get_gamestate(*args):
-            start = time()
-            ("======GAME STATE======")
-            data = await self.call("gamestate.get")
-            print(data)
-            print(f"=====TOOK {floor(time() - start)} SECONDS=====")
-
-        async def data_update_id(*args):
-
-            try:
-                id = int(args[0])
-                key = args[1]
-                try:
-                    value = int(args[2])
-                except:
-                    value = args[2]
-                data = {key: value}
-            except Exception as e:
-                print("""Requires 3 argument: id, key and value""")
-                return
-
-            await self.call("data.player.update", id, data)
-            await data_read_id(id)
-
         async def data_delete_id(*args):
             try:
                 id = int(args[0])
@@ -264,6 +243,7 @@ class Console(ApplicationSession):
                         "clear": peg_clear,
                         "grid": peg_grid,
                         "random": peg_random,
+                        "replace_random": peg_replace_random,
                     },
                     "clear": None,
                 },
@@ -289,7 +269,6 @@ class Console(ApplicationSession):
                 "player": {
                     "read": data_read_id,
                     "alives": get_alives,
-                    "update": data_update_id,
                     "delete": data_delete_id,
                 },
             },
@@ -302,8 +281,8 @@ class Console(ApplicationSession):
                     "remove": remove_alive,
                     "remove_all": None,
                 },
-                "remove_all": None
-            }, 
+                "remove_all": None,
+            },
         }
 
         cursor = []
@@ -392,6 +371,8 @@ class Console(ApplicationSession):
                 elif cmd.startswith("/"):
                     arg = cmd[1:]
                     ret = await self.call("minecraft.post", arg)
+                    print(ret)
+                    continue
 
                 else:
 
@@ -407,7 +388,6 @@ class Console(ApplicationSession):
 
                     continue
 
-                print(cmd)
             except Exception as e:
                 print(f"Exception: [{e}]")
                 continue

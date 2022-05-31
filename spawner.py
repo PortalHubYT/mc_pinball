@@ -11,6 +11,7 @@ import pickle
 
 NAME_WIDTH = 50
 
+
 class Spawner(ApplicationSession):
     async def onJoin(self, details):
         self.gs = await self.call("gamestate.get")
@@ -20,39 +21,56 @@ class Spawner(ApplicationSession):
             y = random.randrange(int(self.gs["height"] * 0.7), self.gs["height"])
             return (x, y)
 
-        def translate_coords(x, y):
+        async def translate_coords(x, y):
+            self.gs = await self.call("gamestate.get")
             return f"{(self.gs['origin_x'] + self.gs['depth']) / 2} {y + self.gs['origin_y'] + 3} {x + self.gs['origin_z']}"
 
-        async def spawn_slime(x, y, tag, display_name="dummy", mob_type="minecraft:slime"):
+        async def spawn_slime(
+            x, y, tag, display_name="dummy", mob_type="minecraft:slime"
+        ):
             nbt = self.get_slime_nbt(display_name, tag)
-            coords = translate_coords(x, y)
+            coords = await translate_coords(x, y)
             cmd = f"summon {mob_type} {coords} {nbt}"
             ret = await self.call("minecraft.post", cmd)
 
-
-        async def spawn_slime_random(tag, display_name="dummy", mob_type="minecraft:slime"):
+        async def spawn_slime_random(
+            tag, display_name="dummy", mob_type="minecraft:slime"
+        ):
             x, y = get_random_spawning_point()
             await spawn_slime(x, y, tag, display_name, mob_type)
 
         async def spawn_player_from_message(message):
             message = pickle.loads(message)
             player_data = {
-                "display_name": sanitize_less_strict(f'[{message["author"]["name"]}]: ' + "".join(
-                        s for s in message["messageEx"] if isinstance(s, str)
-                    )[:20]),
+                "display_name": sanitize_very_strict(f'[{message["author"]["name"]}]'),
                 "username": message["author"]["name"],
                 "alive": 1,
                 "current_alive": 0,
                 "last_checked": message["timestamp"],
                 "channel_id": message["author"]["channelId"],
+                "message": "".join(
+                    s for s in message["messageEx"] if isinstance(s, str)
+                ),
             }
 
             uid = await self.call("data.player.ensure_exists", player_data)
 
             names = await self.call("gamestate.names.all")
-            if not uid in names.keys():
-                self.publish("spawn.player.new", [uid, sanitize_very_strict(player_data["display_name"])])
-                if message["author"]["isChatSponsor"] or message["author"]["isChatOwner"]:
+            # print(type(names.keys()[0]), uid)
+            if not str(uid) in names.keys():
+                self.call("gamestate.names.add", str(uid), message["author"]["name"])
+
+                self.publish(
+                    "spawn.player.new",
+                    [uid, sanitize_very_strict(player_data["display_name"])],
+                )
+                if message["author"]["isChatModerator"]:
+                    mob_type = "iron_golem"
+                elif (
+                    message["author"]["isChatSponsor"]
+                    or message["author"]["isChatOwner"]
+                    or message["author"]["isVerified"]
+                ):
                     mob_type = "magma_cube"
                 else:
                     mob_type = "slime"
@@ -60,7 +78,7 @@ class Spawner(ApplicationSession):
                 print(
                     f"o--> ({player_data['display_name'][:15]}) [id: {uid}] spawned from message"
                 )
-                
+
         await self.register(spawn_slime, "spawn.slime.place")
         await self.register(spawn_slime_random, "spawn.slime.random")
         await self.subscribe(spawn_player_from_message, "chat.message")

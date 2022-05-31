@@ -10,7 +10,7 @@ import default_gamestate
 
 class GameState(ApplicationSession):
     async def onJoin(self, details):
-        
+
         self.highscore = self.load_highscore()
         if self.highscore == None:
             self.highscore = 0
@@ -20,9 +20,9 @@ class GameState(ApplicationSession):
             self.alives = []
         else:
             for uid in self.alives:
-                player_data = pickle.loads(await self.call('data.player.read', uid))
-                self.names[str(uid)] = player_data['display_name']
-            
+                player_data = pickle.loads(await self.call("data.player.read", uid))
+                if player_data:
+                    self.names[str(uid)] = player_data["display_name"]
 
         self.gamestate = self.load_gamestate()
         if self.gamestate == None:
@@ -73,10 +73,9 @@ class GameState(ApplicationSession):
             self.update_gamestate_key, "gamestate.update.key"
         )  # get value for gamestate[key]
 
-
         self.register(self.set_highscore, "gamestate.highscore.set")
         self.register(self.get_highscore, "gamestate.highscore.get")
-        
+
         self.register(self.add_name, "gamestate.names.add")
         self.register(self.get_names, "gamestate.names.all")
         self.register(self.get_name, "gamestate.names.get")
@@ -84,14 +83,16 @@ class GameState(ApplicationSession):
         self.register(self.remove_all_names, "gamestate.names.remove_all")
         self.register(self.remove_all, "gamestate.remove_all")
         self.subscribe(self.add_alive, "spawn.player.new")
-    
+
     def load_highscore(self):
         return self.load_from_file("db", "highscore")
+
     def set_highscore(self, value):
         self.highscore = value
+
     def get_highscore(self):
         return self.highscore
-    
+
     def remove_all(self):
         self.remove_all_names()
         self.names = {}
@@ -128,7 +129,7 @@ class GameState(ApplicationSession):
         return self.alives
 
     def add_alive(self, data):
-        
+
         uid = data[0]
         name = data[1]
         print(f"o--> Adding {uid} {name} to alives and names")
@@ -138,9 +139,9 @@ class GameState(ApplicationSession):
     def remove_alive(self, uid):
         print(f"o--> Removing {uid} from alives")
         self.alives.remove(uid)
-        
+
     def remove_alive_all(self):
-        
+
         self.alives = []
 
     def get_names(self):

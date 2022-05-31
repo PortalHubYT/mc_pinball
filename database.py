@@ -37,6 +37,7 @@ class Database(ApplicationSession):
                     "best_alive": "INTEGER",
                     "last_checked": "INTEGER",
                     "channel_id": "TEXT",
+                    "message": "TEXT",
                 },
                 "schema": None,
             },

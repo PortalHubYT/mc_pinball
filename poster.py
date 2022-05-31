@@ -12,6 +12,18 @@ verbose = False
 debug = False
 
 
+class bcolors:
+    HEADER = "\033[95m"
+    OKBLUE = "\033[94m"
+    OKCYAN = "\033[96m"
+    OKGREEN = "\033[92m"
+    WARNING = "\033[93m"
+    FAIL = "\033[91m"
+    ENDC = "\033[0m"
+    BOLD = "\033[1m"
+    UNDERLINE = "\033[4m"
+
+
 class Poster(ApplicationSession):
     async def onJoin(self, details):
 
@@ -20,6 +32,13 @@ class Poster(ApplicationSession):
         def post(cmd):
 
             ret = mc.post(cmd)
+
+            start_format = bcolors.OKCYAN
+            if "Expected" in ret or "Incorrect" in ret:
+                start_format = bcolors.FAIL
+
+            end_format = bcolors.ENDC
+
             if verbose:
                 print("============COMMAND================")
 
@@ -27,13 +46,15 @@ class Poster(ApplicationSession):
                     if "data get entity" in cmd or "summon" in cmd:
                         if debug is False:
                             print(f"CMD: [/{cmd.split('{')[0][:-1]}]")
-                            print(f"RETURN: [{ret.split('{')[0]}]")
+                            print(
+                                f"RETURN: [{start_format}{ret.split('{')[0][:-1]}{end_format}]"
+                            )
                         else:
                             print(f"CMD: [/{cmd}]")
-                            print(f"RETURN: [{ret}]")
+                            print(f"[RETURN: [{start_format}{ret}{end_format}]")
                     else:
                         print(f"CMD: [/{cmd}]")
-                        print(f"RETURN: [{ret}]")
+                        print(f"RETURN: [{start_format}{ret}{end_format}]")
             return ret
 
         await self.register(post, "minecraft.post")

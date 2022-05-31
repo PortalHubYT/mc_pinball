@@ -112,8 +112,6 @@ class Component(ApplicationSession):
         await self.display_scores(names_copy)
     
     async def display_scores(self, names):
-        print("scores are:", self.scores)
-        print("names are:", names)
         top_ten = sorted(self.scores.items(), key=lambda item: item[1], reverse=True)[:10]
         current_glowing = 0
         for entry in top_ten:
