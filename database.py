@@ -76,11 +76,14 @@ class Database(ApplicationSession):
         cmd = f"SELECT id FROM 'players' WHERE channel_id = '{channelid}';"
         id = self.execute(cmd).fetchone()
         print(
-            f"o---({floor(time()- start)}s)---> Reading player with channelid {channelid}"
+            f"o-({floor(time()- start)}s)-> Does [{channelid[10:]}...] exists? (",
+            end="",
         )
         if isinstance(id, tuple):
+            print("yes)")
             return id[0]
         else:
+            print("no)")
             return None
 
     def ensure_player_exist(self, player_data):
@@ -136,7 +139,7 @@ class Database(ApplicationSession):
         id = self.execute(cmd).lastrowid
         self.conn.commit()
 
-        print(f"o---({floor(time() - start)}s)---> Creating player with id {id}")
+        print(f"o-({floor(time() - start)}s)-> Creating player with id {id}")
         return id
 
     def player_update_id(self, id, data):
@@ -149,9 +152,7 @@ class Database(ApplicationSession):
             cmd = f"UPDATE players SET {item} = {value} WHERE id = {id};"
             self.execute(cmd)
         self.conn.commit()
-        print(
-            f"o---({floor(time() - start)}s)---> Updated player {id} with data:\n{data}"
-        )
+        print(f"o-({floor(time() - start)}s)-> Updated player {id} data")
 
     ####################################
     ##              MISC             ##
@@ -167,7 +168,7 @@ class Database(ApplicationSession):
             for i, field in enumerate(item):
                 data[self.tables[table]["schema"][i]] = field
 
-        print(f"o---({floor(time() - start)}s)---> Reading {table} with id {id}")
+        print(f"o-({floor(time() - start)}s)-> Reading {table} with id {id}")
         return data
 
     def ensure_table(self, table):

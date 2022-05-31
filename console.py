@@ -234,6 +234,28 @@ class Console(ApplicationSession):
 
             await self.call("data.player.delete", id)
 
+        async def remove_name(*args):
+            try:
+                id = int(args[0])
+            except Exception as e:
+                print("""Requires 1 argument: id""")
+                return
+
+            self.call("gamestate.names.remove", id)
+
+        async def remove_alive(*args):
+            try:
+                id = int(args[0])
+            except Exception as e:
+                print("""Requires 1 argument: id""")
+                return
+
+            self.call("gamestate.alives.remove", id)
+
+        async def remove_all(*args):
+            await remove_name(args)
+            await remove_alive(args)
+
         architecture = {
             "builder": {
                 "arena": {
@@ -256,7 +278,7 @@ class Console(ApplicationSession):
             },
             "spawn": {
                 "player": {
-                    "place": place_player,
+                    "new": place_player,
                     "random": place_random_player,
                 },
                 "slime": {
@@ -271,8 +293,18 @@ class Console(ApplicationSession):
                     "update": data_update_id,
                     "delete": data_delete_id,
                 },
-                "gamestate": {"get": get_gamestate},
             },
+            "gamestate": {
+                "names": {
+                    "remove": remove_name,
+                    "remove_all": None,
+                },
+                "alives": {
+                    "remove": remove_alive,
+                    "remove_all": None,
+                },
+                "remove_all": None
+            }, 
         }
 
         cursor = []

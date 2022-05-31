@@ -10,10 +10,15 @@ import default_gamestate
 
 class GameState(ApplicationSession):
     async def onJoin(self, details):
-        
+        self.names = {}
         self.alives = self.load_alives()
         if self.alives == None:
             self.alives = []
+        else:
+            for uid in self.alives:
+                player_data = pickle.loads(await self.call('data.player.read', uid))
+                self.names[str(uid)] = player_data['display_name']
+            
 
         self.gamestate = self.load_gamestate()
         if self.gamestate == None:
@@ -24,24 +29,24 @@ class GameState(ApplicationSession):
             f"whitelist on",
             f"time set noon",
             f"gamerule sendCommandFeedback false",
-            f"kill @e[type=!player]",
-            f"kill @e[type=!player]",
-            f"kill @e[type=!player]",
             f'title @e[type=player] title "Restarting..."',
             f'title @e[type=player] subtitle "Type anything to join the game"',
-            f"bossbar set minecraft:peglin value 0"
             f'scoreboard objectives add a dummy "Longest alive"',
-            f'scoreboard objectives add a dummy "Highest scores"'
+            f'scoreboard objectives add a dummy "Highest scores"',
             f"scoreboard objectives setdisplay sidebar alive_for",
             f"scoreboard players reset * alive_for",
+            f'scoreboard objectives add alive_for dummy "Alive"',
+            f'bossbar add minecraft:peglin "default"',
             f'bossbar set minecraft:peglin name "High score: {0}"',
-            f"scoreboard objectives setdisplay sidebar high_scores",
+            f"bossbar set minecraft:peglin visible true",
+            f"bossbar set minecraft:peglin players @a",
+            f"bossbar set minecraft:peglin style progress",
         ]
 
         for cmd in default_env_commands:
             await self.call("minecraft.post", cmd)
 
-        self.to_save = ["alives", "gamestate"]
+        self.to_save = ["alives", "gamestate", "names"]
 
         self.register(self.get_alives, "gamestate.alives.get")  # returns alives list
         self.register(
@@ -49,6 +54,9 @@ class GameState(ApplicationSession):
         )  # adds an id in alives list
         self.register(
             self.remove_alive, "gamestate.alives.remove"
+        )  # adds an id in alives list
+        self.register(
+            self.remove_alive_all, "gamestate.alives.remove_all"
         )  # adds an id in alives list
         self.register(self.get_gamestate, "gamestate.get")  # returns gamestate dict
         self.register(
@@ -61,7 +69,17 @@ class GameState(ApplicationSession):
             self.update_gamestate_key, "gamestate.update.key"
         )  # get value for gamestate[key]
 
-        self.subscribe(self.add_alive, "spawn.new_player")
+        self.register(self.add_name, "gamestate.names.add")
+        self.register(self.get_names, "gamestate.names.all")
+        self.register(self.get_name, "gamestate.names.get")
+        self.register(self.remove_name, "gamestate.names.remove")
+        self.register(self.remove_all_names, "gamestate.names.remove_all")
+        self.register(self.remove_all, "gamestate.remove_all")
+        self.subscribe(self.add_alive, "spawn.player.new")
+
+    def remove_all(self):
+        self.remove_all_names()
+        self.names = {}
 
     def ensure_file(self, dir, store_name):
         filepath = f"{dir}/{store_name}"
@@ -92,19 +110,39 @@ class GameState(ApplicationSession):
             pickle.dump(data, f)
 
     def get_alives(self):
-        return self.alives['ids']
+        return self.alives
 
-    def add_alive(self, uid):
-        self.alives['ids'].append(uid)
-
-    def add_alive(self, uid):
-        self.alives['ids'].append(uid)
+    def add_alive(self, data):
         
+        uid = data[0]
+        name = data[1]
+        print(f"o--> Adding {uid} {name} to alives and names")
+        self.alives.append(uid)
+        self.names[str(uid)] = name
+
     def remove_alive(self, uid):
-        self.alives['ids'].remove(uid)
+        print(f"o--> Removing {uid} from alives")
+        self.alives.remove(uid)
         
-    def remove_name(self, key, id):
-        self.alives['display'].remove(name)
+    def remove_alive_all(self):
+        
+        self.alives = []
+
+    def get_names(self):
+        pickle.dumps(self.names)
+        return self.names
+
+    def get_name(self, uid):
+        return self.names[uid]
+
+    def add_name(self, uid, name):
+        self.names[str(uid)] = name
+
+    def remove_name(self, uid):
+        self.names.pop(str(uid), None)
+
+    def remove_all_names(self):
+        self.names = {}
 
     def get_gamestate(self):
         return self.gamestate
@@ -117,7 +155,6 @@ class GameState(ApplicationSession):
         self.publish("gamestate.changed")
 
     def update_gamestate_key(self, k, v):
-
         self.gamestate[k] = v
         self.publish("gamestate.changed")
 

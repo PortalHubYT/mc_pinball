@@ -22,15 +22,18 @@ class Poster(ApplicationSession):
             ret = mc.post(cmd)
             if verbose:
                 print("============COMMAND================")
-                print(f"CMD: [/{cmd}]")
-                if ret != "":
-                    if "data get entity" in cmd:
-                        print("data get entity")
-                        if debug is False:
-                            print(f"RESULT: {ret.split('{')[0]}")
-                            return ret
 
-            print(f"RETURN: [{ret}]")
+                if ret != "":
+                    if "data get entity" in cmd or "summon" in cmd:
+                        if debug is False:
+                            print(f"CMD: [/{cmd.split('{')[0][:-1]}]")
+                            print(f"RETURN: [{ret.split('{')[0]}]")
+                        else:
+                            print(f"CMD: [/{cmd}]")
+                            print(f"RETURN: [{ret}]")
+                    else:
+                        print(f"CMD: [/{cmd}]")
+                        print(f"RETURN: [{ret}]")
             return ret
 
         await self.register(post, "minecraft.post")

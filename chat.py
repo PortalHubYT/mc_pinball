@@ -28,10 +28,6 @@ class Chat(ApplicationSession):
         self.stream_id = "5qap5aO4i9A"
         self.stream_url = f"https://www.youtube.com/watch?v={self.stream_id}"
 
-        chat = pytchat.create(
-            video_id=self.stream_url, interruptable=False, hold_exception=False
-        )
-
         def chat_query():
             while chat.is_alive():
                 for c in chat.get().sync_items():
@@ -47,6 +43,9 @@ class Chat(ApplicationSession):
                     self.publish("chat.message", pickle.dumps(message))
 
         while True:
+            chat = pytchat.create(
+                video_id=self.stream_url, interruptable=False, hold_exception=False
+            )
             try:
                 chat_query()
             except Exception as e:
