@@ -4,3 +4,6 @@ __pycache__/
 archive
 *.sql
 mcapi/
+workspace.code-workspace
+db/alives
+db/gamestate

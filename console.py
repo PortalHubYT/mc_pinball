@@ -128,7 +128,6 @@ class Console(ApplicationSession):
                         print(f"{key} is not a valid key in the board environment")
                         return
 
-                    print(key, value)
                     if modificator == "=":
                         await self.call("gamestate.update.key", key, value)
                     else:

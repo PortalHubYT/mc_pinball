@@ -71,6 +71,8 @@ class Builder(ApplicationSession):
         instructions = self.board.deconstruct()
         for cmd in instructions:
             self.call("minecraft.post", cmd)
+        self.call("minecraft.post", "execute as @e[type=!player] at @s run tp @s ~ 0 ~")
+
 
     def board_getter(
         self,

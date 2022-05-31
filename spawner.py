@@ -21,13 +21,14 @@ class Spawner(ApplicationSession):
             return (x, y)
 
         def translate_coords(x, y):
-            return f"{(self.gs['origin_x'] + self.gs['depth']) / 2} {y + self.gs['origin_y'] + 5} {x + self.gs['origin_z']}"
+            return f"{(self.gs['origin_x'] + self.gs['depth']) / 2} {y + self.gs['origin_y'] + 3} {x + self.gs['origin_z']}"
 
         async def spawn_slime(x, y, tag, display_name="dummy"):
             nbt = self.get_slime_nbt(display_name, tag)
             coords = translate_coords(x, y)
             cmd = f"summon minecraft:slime {coords} {nbt}"
             ret = await self.call("minecraft.post", cmd)
+
 
         async def spawn_slime_random(tag, display_name="dummy"):
             x, y = get_random_spawning_point()

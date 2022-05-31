@@ -25,7 +25,7 @@ class Chat(ApplicationSession):
         super().call(*args)
 
     async def onJoin(self, details):
-        self.stream_id = "5qap5aO4i9A"
+        self.stream_id = "uJcDAS7DdHw"
         self.stream_url = f"https://www.youtube.com/watch?v={self.stream_id}"
 
         def chat_query():

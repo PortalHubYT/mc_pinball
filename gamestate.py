@@ -10,6 +10,10 @@ import default_gamestate
 
 class GameState(ApplicationSession):
     async def onJoin(self, details):
+        
+        self.highscore = self.load_highscore()
+        if self.highscore == None:
+            self.highscore = 0
         self.names = {}
         self.alives = self.load_alives()
         if self.alives == None:
@@ -69,6 +73,10 @@ class GameState(ApplicationSession):
             self.update_gamestate_key, "gamestate.update.key"
         )  # get value for gamestate[key]
 
+
+        self.register(self.set_highscore, "gamestate.highscore.set")
+        self.register(self.get_highscore, "gamestate.highscore.get")
+        
         self.register(self.add_name, "gamestate.names.add")
         self.register(self.get_names, "gamestate.names.all")
         self.register(self.get_name, "gamestate.names.get")
@@ -76,7 +84,14 @@ class GameState(ApplicationSession):
         self.register(self.remove_all_names, "gamestate.names.remove_all")
         self.register(self.remove_all, "gamestate.remove_all")
         self.subscribe(self.add_alive, "spawn.player.new")
-
+    
+    def load_highscore(self):
+        return self.load_from_file("db", "highscore")
+    def set_highscore(self, value):
+        self.highscore = value
+    def get_highscore(self):
+        return self.highscore
+    
     def remove_all(self):
         self.remove_all_names()
         self.names = {}

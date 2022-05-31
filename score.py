@@ -14,7 +14,6 @@ import pickle
 SCOREBOARD_WIDTH = 10
 
 class Component(ApplicationSession):
-
     def reset_scores(self):
         scores = {}
         for uid in self.names:
@@ -22,12 +21,14 @@ class Component(ApplicationSession):
         return scores
     
     async def onJoin(self, details):
+        self.highscore = await self.call('gamestate.highscore.get')
+        self.call('minecraft.post', 
+                    f"bossbar set minecraft:peglin name \"High score: {self.highscore}\""
+            )
         self.names = await self.call('gamestate.names.all')
         self.scores = self.reset_scores()
         
         await self.check_alive()
-        # with open("db/high_score", "r") as f:
-        #         self.highscore = f.read()
         
 
         self.subscribe(self.check_alive, "game.tick")
@@ -101,7 +102,6 @@ class Component(ApplicationSession):
     
     async def display_scores(self, names):
         
-        # print("unsorted:", self.scores)
         top_ten = sorted(self.scores.items(), key=lambda item: item[1], reverse=True)[:10]
         
         for entry in top_ten:
@@ -138,21 +138,22 @@ class Component(ApplicationSession):
         self.call('minecraft.post', f"scoreboard players set {name[:SCOREBOARD_WIDTH]} alive_for 0")
         self.call('minecraft.post', f"scoreboard players reset {name[:SCOREBOARD_WIDTH]} alive_for")
         
-        # if self.names[str(uid)] > self.highscore:
-        #     with open("db/high_score", "w") as f:
-        #         f.write(str(self.scores[str(uid)]))
-            
-        #     with open("db/high_score", "w") as f:
-        #         f.write(str(self.scores[str(uid)]))
-
-        # self.call('minecraft.post', 
-        #         f"bossbar set minecraft:peglin name \"High score: {uid['time']} | {uid['name']}\""
-        # )
+        score = self.scores[str(uid)]
+        if score > self.highscore:
+            self.highscore = score
+            self.call('gamestate.highscore', score)
+            self.call('minecraft.post', 
+                    f"bossbar set minecraft:peglin name \"High score: {score} | {name}\""
+            )
 
         # print("scores=", self.scores)
-        self.call('minecraft.post', 
-            f"title funyrom actionbar \"{name} died after {self.scores[str(uid)]} seconds\""
-        )
+
+        try:
+            self.call('minecraft.post', 
+                f"title funyrom actionbar \"{name} died after {self.scores[str(uid)]} seconds\""
+            )
+        except Exception as e:
+            print(e)
 
     def onDisconnect(self):
         for uid in self.scores:
