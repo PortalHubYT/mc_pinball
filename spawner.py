@@ -9,6 +9,7 @@ import random
 from input import sanitize_very_strict
 import pickle
 
+NAME_WIDTH = 50
 
 class Spawner(ApplicationSession):
     async def onJoin(self, details):
@@ -20,7 +21,7 @@ class Spawner(ApplicationSession):
             return (x, y)
 
         def translate_coords(x, y):
-            return f"{(self.gs['origin_x'] + self.gs['depth']) / 2} {y + self.gs['origin_y']} {x + self.gs['origin_z']}"
+            return f"{(self.gs['origin_x'] + self.gs['depth']) / 2} {y + self.gs['origin_y'] + 5} {x + self.gs['origin_z']}"
 
         async def spawn_slime(x, y, tag, display_name="dummy"):
             nbt = self.get_slime_nbt(display_name, tag)
@@ -45,23 +46,14 @@ class Spawner(ApplicationSession):
 
             uid = await self.call("data.player.ensure_exists", player_data)
 
-            alives = await self.call("gamestate.alives.get")
-
-            dead = True
-            for alive in alives:
-                if uid == alive:
-                    dead = False
-
-            if not dead:
-                return None
-
-            self.publish("spawn.new_player", uid)
-
-            await spawn_slime_random(uid, player_data["display_name"])
-            print(
-                f"o--> Spawning a player ({player_data['display_name']}) [{uid}] from a message"
-            )
-
+            names = await self.call("gamestate.names.all")
+            if not uid in names.keys():
+                self.publish("spawn.player.new", [uid, player_data["display_name"]])
+                await spawn_slime_random(uid, player_data["display_name"])
+                print(
+                    f"o--> ({player_data['display_name'][:15]}) [id: {uid}] spawned from message"
+                )
+                
         await self.register(spawn_slime, "spawn.slime.place")
         await self.register(spawn_slime_random, "spawn.slime.random")
         await self.subscribe(spawn_player_from_message, "chat.message")
@@ -95,7 +87,9 @@ class Spawner(ApplicationSession):
                                         "Tags": [tag],
                                         "Duration": 120000,
                                         "CustomNameVisible": 1,
-                                        "CustomName": '{ "text": "' + f"{name}" + '"}',
+                                        "CustomName": '{ "text": "'
+                                        + f"{name[:NAME_WIDTH]}"
+                                        + '"}',
                                     }
                                 ],
                             }
