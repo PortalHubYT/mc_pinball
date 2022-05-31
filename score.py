@@ -103,33 +103,29 @@ class Component(ApplicationSession):
     async def display_scores(self, names):
         
         top_ten = sorted(self.scores.items(), key=lambda item: item[1], reverse=True)[:10]
-        
+        current_glowing = 0
         for entry in top_ten:
             # print("namees here: ", self.names)
             tag = entry[0]
             name = names[tag]
-        
-            
-            # print(name, tag)
-            # cmd = (
-            #     f"data merge entity @e[type={ball['mob_type']},tag={ball['tag']},limit=1]"
-            #     + " {Glowing:0b}"
-            # )
-            # self.call('minecraft.post', cmd)
 
             if not "PortalHub" in name:
                 ret = await self.call('minecraft.post', 
                     f"scoreboard players set {name[:SCOREBOARD_WIDTH]} alive_for {self.scores[tag]}"
                 )
-                # print("SCORE: ", ret)
-
-        # cmd = (
-        #     f"data merge entity @e[type={balls[-1]['mob_type']},tag={balls[-1]['tag']},limit=1]"
-        #     + " {Glowing:1b}"
-        # )
-        # self.call('minecraft.post', cmd)
-            
                 
+        cmd = (
+            f"data merge entity @e[type=slime,tag={current_glowing},limit=1]"
+            + " {Glowing:0b}"
+        )
+        self.call('minecraft.post', cmd)
+        if len(top_ten):
+            current_glowing = top_ten[0][0]
+        cmd = (
+            f"data merge entity @e[type=slime,tag={current_glowing},limit=1]"
+            + " {Glowing:1b}"
+        )
+        self.call('minecraft.post', cmd)
 
     # def next_round(derp):
     #     cmd = f"execute as @e[tag=[{i}, ball]] at @s run tp @s ~ {self.gamestate.origin_y + self.gamestate.height + 2} ~"

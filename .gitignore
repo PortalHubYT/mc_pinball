@@ -7,3 +7,9 @@ mcapi/
 workspace.code-workspace
 db/alives
 db/gamestate
+score.py
+.gitignore
+db/highscore
+db/names
+db/pinball.db
+db/pinball.db-journal
