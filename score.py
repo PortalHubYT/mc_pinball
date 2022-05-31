@@ -46,7 +46,6 @@ class Component(ApplicationSession):
         return int(float(hs))
     
     async def kill(self, uid, name):
-        start = time()
         cmd = f"kill @e[tag={uid}, type=!player]"
 
         await self.call("minecraft.post", cmd)
@@ -55,20 +54,32 @@ class Component(ApplicationSession):
             "last_checked": int(time()),
             "current_alive": 0,
             "alive": 0,
+            # "score": 
         }
+        
         self.delete_score(uid, name)
-        self.call("gamestate.names.remove", uid)
-        self.names.pop(str(uid))
-        self.scores.pop(str(uid))
+        await self.call("gamestate.names.remove", uid)
+        
+        if not str(uid) in self.names:
+            return print(f"/!\ Tried to pop fromm names with id {uid}: no such key")
+        else:
+            self.names.pop(str(uid), None)
+        
+        if not str(uid) in self.scores:
+            return print(f"/$\ Tried to pop fromm scores with id {uid}: no such key")
+        else:
+            self.scores.pop(str(uid), None)
+        
+       
+        
         self.call('minecraft.post', f'scoreboard players reset {name} alive_for')
         await self.call("data.player.update", uid, updated_data)
-        print(f"o-({floor(time() - start)}s)-> Player {uid} killed")
         
     
 
     async def check_alive(self):
         self.names = await self.call('gamestate.names.all')
-        print(f"o--> Check alive on {len(self.names)} players")
+        print(f"\no--> Check alive on {len(self.names)} players")
         
         
         names_copy = self.names.copy()
@@ -101,12 +112,15 @@ class Component(ApplicationSession):
         await self.display_scores(names_copy)
     
     async def display_scores(self, names):
-        
+        print("scores are:", self.scores)
+        print("names are:", names)
         top_ten = sorted(self.scores.items(), key=lambda item: item[1], reverse=True)[:10]
         current_glowing = 0
         for entry in top_ten:
-            # print("namees here: ", self.names)
             tag = entry[0]
+            # print(f"{tag=}")
+            if tag not in names:
+                return print(f"[[[[[[name missing on {tag} ]]]]]]]")
             name = names[tag]
 
             if not "PortalHub" in name:
@@ -134,7 +148,10 @@ class Component(ApplicationSession):
         self.call('minecraft.post', f"scoreboard players set {name[:SCOREBOARD_WIDTH]} alive_for 0")
         self.call('minecraft.post', f"scoreboard players reset {name[:SCOREBOARD_WIDTH]} alive_for")
         
+        if str(uid) not in self.scores:
+            return print(f"/!\ Tried to kill an id {uid} not in scores")
         score = self.scores[str(uid)]
+        
         if score > self.highscore:
             self.highscore = score
             self.call('gamestate.highscore', score)
@@ -142,14 +159,9 @@ class Component(ApplicationSession):
                     f"bossbar set minecraft:peglin name \"High score: {score} | {name}\""
             )
 
-        # print("scores=", self.scores)
-
-        try:
-            self.call('minecraft.post', 
-                f"title funyrom actionbar \"{name} died after {self.scores[str(uid)]} seconds\""
-            )
-        except Exception as e:
-            print(e)
+        self.call('minecraft.post', 
+            f"title funyrom actionbar \"{name} died after {self.scores[str(uid)]} seconds\""
+        )
 
     def onDisconnect(self):
         for uid in self.scores:
