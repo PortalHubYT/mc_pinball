@@ -19,142 +19,32 @@ class Builder(ApplicationSession):
 
         ## ENV ##
         self.board = Board(await self.call("gamestate.get"), self)
-        self.arena = Arena(self.board)
+        self.board.arena = Arena(self.board, self)
+        
 
-        await self.register(self.board_constructer, "builder.board.construct")
-        await self.register(self.board_deconstructer, "builder.board.clear")
-        await self.register(self.board_getter, "builder.board.get")
+        await self.register(self.board.construct, "builder.board.construct")
+        await self.register(self.board.deconstruct, "builder.board.clear")
 
-        await self.register(self.arena_tile_placer, "builder.arena.tile.place")
-        await self.register(self.arena_tile_line_placer, "builder.arena.tile.line")
-        await self.register(self.arena_line_remover, "builder.arena.tile.clear.line")
-        await self.register(self.arena_grid_placer, "builder.arena.tile.grid")
-        await self.register(self.arena_tile_remover, "builder.arena.tile.clear")
-        await self.register(self.arena_tile_random, "builder.arena.tile.random")
+        await self.register(self.board.arena.replace_tile, "builder.arena.tile.place")
+        await self.register(self.board.arena.place_line, "builder.arena.tile.line")
         await self.register(
-            self.arena_replace_random, "builder.arena.tile.replace_random"
+            self.board.arena.remove_tile_line, "builder.arena.tile.clear.line"
         )
-        await self.register(self.arena_deconstructer, "builder.arena.clear")
-        await self.subscribe(self.check_if_peg_message, "chat.message")
-        await self.subscribe(self.board_constructer, "gamestate.changed")
-        await self.register(self.load_default_env, "builder.default")
-
+        await self.register(self.board.arena.place_grid, "builder.arena.tile.grid")
+        await self.register(self.board.arena.remove_tile, "builder.arena.tile.clear")
+        await self.register(self.board.arena.random_tiles, "builder.arena.tile.random")
+        await self.register(
+            self.board.arena.replace_random, "builder.arena.tile.replace_random"
+        )
+        await self.register(self.board.arena.deconstruct, "builder.arena.clear")
+        await self.subscribe(self.board.check_if_peg_message, "chat.message")
+        await self.subscribe(self.board.construct, "gamestate.changed")
+        await self.subscribe(self.board.trigger_next_round, "game.round.next")
+        await self.register(self.board.load_default_env, "builder.default")
+        await self.register(self.board.camera_place, "builder.camera.place")
+        
     def onDisconnect(self):
         asyncio.get_event_loop().stop()
-
-    ## BOARD ##
-
-    # Variable args to handle console input construct as well as change of env
-    async def board_constructer(self, *args):
-        self.board.env = await self.call("gamestate.get")
-        self.board_deconstructer()
-        print("o-> Constructing board")
-
-        gen_terrain = True
-
-        if len(args) == 1 and args[0] == "empty":
-            gen_terrain = False
-
-        instructions = self.board.construct()
-
-        for cmd in instructions:
-            self.call("minecraft.post", cmd)
-
-        self.arena = Arena(self.board)
-
-        if gen_terrain:
-            self.arena_tile_random()
-
-    def board_deconstructer(
-        self,
-    ):
-        self.arena_deconstructer()
-        print("o--> Deconstructing board")
-
-        instructions = self.board.deconstruct()
-        for cmd in instructions:
-            self.call("minecraft.post", cmd)
-        self.call("minecraft.post", "execute as @e[type=!player] at @s run tp @s ~ 0 ~")
-
-    def board_getter(
-        self,
-    ):
-        print("Fetching board data as pickle")
-        return pickle.dumps(self.board)
-
-    ## ARENA ##
-
-    def arena_deconstructer(
-        self,
-    ):
-        print("o---> Deconstructing arena")
-        instructions = self.arena.deconstruct()
-        for instruction in instructions:
-            for cmd in instruction["list"]:
-                self.call("minecraft.post", cmd)
-
-    def arena_tile_placer(self, x, y):
-        self.arena_tile_remover(x, y)
-        print(f"Placing tile at {x} {y}")
-
-        instructions = self.arena.replace_tile(Peg(x, y))
-        for instruction in instructions:
-            for cmd in instruction["list"]:
-                self.call("minecraft.post", cmd)
-
-    def arena_tile_line_placer(self, y, spacing, limit=None):
-        self.arena_line_remover(y)
-        print(f"o---> Placing line of tiles with y={y} with spacing={spacing}")
-
-        instructions = self.arena.place_line(y, spacing, limit=limit, type=Peg)
-        for instruction in instructions:
-            for cmd in instruction["list"]:
-                self.call("minecraft.post", cmd)
-
-    def arena_tile_remover(self, x, y):
-        print(f"Removing tile at {x} {y}")
-        instructions = self.arena.remove_tile(x, y, Peg)
-        for instruction in instructions:
-            for cmd in instruction["list"]:
-                self.call("minecraft.post", cmd)
-
-    def arena_line_remover(self, y):
-        print(f"Removing line of tiles at y={y}")
-        instructions = self.arena.remove_tile_line(y, Peg)
-        for instruction in instructions:
-            for cmd in instruction["list"]:
-                self.call("minecraft.post", cmd)
-
-    def arena_grid_placer(self, x_spacing=8, y_spacing=8):
-        self.arena_deconstructer()
-        print(f"o---> Placing grid of tiles with x={x_spacing} y={y_spacing}")
-        instructions = self.arena.place_grid(x_spacing, y_spacing, type=Peg)
-        for instruction in instructions:
-            for cmd in instruction["list"]:
-                self.call("minecraft.post", cmd)
-
-    def arena_tile_random(self, spacing=6, limit=100):
-        self.arena_deconstructer()
-        print(f"o---> Placing random tiles with spacing={spacing} limit={limit}")
-        instructions = self.arena.random_tiles(spacing, limit, type=Peg)
-        for instruction in instructions:
-            for cmd in instruction["list"]:
-                self.call("minecraft.post", cmd)
-
-    def arena_replace_random(self):
-        print(f"Replacing a random tiles at y")
-        instructions = self.arena.replace_random()
-        for instruction in instructions:
-            for cmd in instruction["list"]:
-                self.call("minecraft.post", cmd)
-
-    def check_if_peg_message(self, message):
-        message = pickle.loads(message)
-        if "peg" in "".join(s for s in message["messageEx"] if isinstance(s, str)):
-            self.arena_replace_random()
-
-    def load_default_env(self):
-        self.call("gamestate.update", default)
 
 
 class Board:
@@ -162,12 +52,35 @@ class Board:
 
         self.env = env
         self.builder = builder
+        self.DEFAULT_TYPE = Peg
 
         try:
             self.compute_coords()
         except KeyError:
             print("Some keys couldn't be found, default env is loaded")
             self.builder.load_default_env()
+
+    def camera_place(self):
+        self.builder.call(
+            "minecraft.post",
+            f"execute as @e[name=funyrom] at @s run tp @s {self.env['origin_x'] - 44} {self.env['origin_y'] + 25} {self.env['origin_z'] + 41} -90 0",
+        )
+
+    async def trigger_next_round(self):
+        # self.make_background()
+        await self.arena.random_tiles()
+        self.builder.call(
+            "minecraft.post",
+            f"execute as @e[tag=ball] at @s run tp @s ~ {self.env['height']} ~",
+        )
+
+    async def check_if_peg_message(self, message):
+        message = pickle.loads(message)
+        if "peg" in "".join(s for s in message["messageEx"] if isinstance(s, str)):
+            await self.arena.replace_random()
+
+    def load_default_env(self):
+        self.builder.call("gamestate.update", default)
 
     def compute_coords(self):
 
@@ -200,26 +113,38 @@ class Board:
             ),
         )
 
-    def deconstruct(self):
+    async def deconstruct(self, *args):
+
+        await self.arena.deconstruct()
         cmds = []
 
-        for i in range(255):
+        for i in range(120):
             zone = mc.Zone(
                 (self.x1 - 5, 0 + i, self.z1 - 5),
                 (self.x2 + 5, 0 + i, self.z1 + 100),
             )
-            cmds.extend(mc._set_zone(zone, mc.Block("air"), "replace")["list"])
+            cmds.append(mc._set_zone(zone, mc.Block("air"), "replace")["list"])
 
             if i == 3:
-                cmds.extend(
+                cmds.append(
                     mc._set_zone(zone, mc.Block("grass_block"), "replace")["list"]
                 )
 
-        return cmds
+        for cmd in cmds:
+            for instruction in cmd:
+                await self.builder.call("minecraft.post", instruction)
 
-    def construct(self):
+        self.builder.call(
+            "minecraft.post", "execute as @e[type=!player] at @s run tp @s ~ 0 ~"
+        )
 
-        instructions = []
+    # Variable args to handle console input construct as well as change of env
+    async def construct(self, *args):
+
+        self.env = await self.builder.call("gamestate.get")
+        await self.deconstruct()
+
+        print("o-> Constructing board")
 
         self.compute_coords()
 
@@ -236,15 +161,15 @@ class Board:
         for structure in structures:
             cmds = structure()
 
-            if type(cmds) is dict:
-                cmds = [cmds]
+        gen_terrain = True
 
-            for instruction in cmds:
+        if len(args) == 1 and args[0] == "empty":
+            gen_terrain = False
 
-                for cmd in instruction["list"]:
-                    instructions.append(cmd)
-
-        return instructions
+        if gen_terrain:
+            await self.arena.random_tiles()
+            await self.arena.replace_tile(FooDar(5, 5, self.builder))
+     
 
     def make_cover(self):
         self.cover = {
@@ -256,6 +181,9 @@ class Board:
         }
 
         cmds = mc._set_zone(self.cover["zone"], self.cover["block"], "replace")
+
+        for instruction in cmds["list"]:
+            self.builder.call("minecraft.post", instruction)
         return cmds
 
     def make_hollow_area(self):
@@ -269,6 +197,8 @@ class Board:
         cmds = mc._set_zone(
             self.hollow_area["zone"], self.hollow_area["block"], "replace"
         )
+        for instruction in cmds["list"]:
+            self.builder.call("minecraft.post", instruction)
         return cmds
 
     def make_front_wall(self):
@@ -282,6 +212,8 @@ class Board:
         cmds = mc._set_zone(
             self.front_wall["zone"], self.front_wall["block"], "replace"
         )
+        for instruction in cmds["list"]:
+            self.builder.call("minecraft.post", instruction)
         return cmds
 
     def make_back_wall(self):
@@ -293,6 +225,8 @@ class Board:
         }
 
         cmds = mc._set_zone(self.back_wall["zone"], self.back_wall["block"], "replace")
+        for instruction in cmds["list"]:
+            self.builder.call("minecraft.post", instruction)
         return cmds
 
     def make_background(self):
@@ -322,33 +256,32 @@ class Board:
             "block": self.env["background_block"],
         }
 
-        colored_block_list = ["minecraft:white_wool", "minecraft:white_concrete"]
+        colored_block_list = ["red_wool", "red_concrete"]
         if str(self.background["block"]) in colored_block_list:
             self.background["block"] = mc.Block(
                 self.background["block"].replace(
-                    "white",
+                    "red",
                     colors[color],
                 )
             )
 
+        self.env["background_block"] = self.background["block"]
         cmds = mc._set_zone(
             self.background["zone"], self.background["block"], "replace"
         )
 
+        for instruction in cmds["list"]:
+            self.builder.call("minecraft.post", instruction)
         return cmds
 
     def make_sides(self):
-        cmds = []
-        cmds.extend(self.make_right_side())
-        cmds.extend(self.make_left_side())
-        return cmds
+        self.make_right_side()
+        self.make_left_side()
 
     def make_right_side(self):
-        cmds = []
-        cmds.extend(self.make_right_bouncer())
-        cmds.append(self.make_right_wall())
-        cmds.extend(self.make_right_cover())
-        return cmds
+        self.make_right_bouncer()
+        self.make_right_wall()
+        self.make_right_cover()
 
     def make_right_bouncer(self):
 
@@ -372,6 +305,9 @@ class Board:
                 zone = mc.Zone((self.x1, i, self.z2 + 2), (self.x2, i, self.z2 + 2))
                 cmds.append(mc._set_zone(zone, self.right_bouncer["block"], "replace"))
 
+        for instruction in cmds:
+            for cmd in instruction["list"]:
+                self.builder.call("minecraft.post", cmd)
         return cmds
 
     def make_right_wall(self):
@@ -385,6 +321,8 @@ class Board:
         cmds = mc._set_zone(
             self.right_wall["zone"], self.right_wall["block"], "replace"
         )
+        for instruction in cmds["list"]:
+            self.builder.call("minecraft.post", instruction)
         return cmds
 
     def make_right_cover(self):
@@ -405,14 +343,15 @@ class Board:
                 zone = mc.Zone((self.x1, i, self.z2), (self.x2, i, self.z2))
                 cmds.append(mc._set_zone(zone, self.right_cover["block"], "replace"))
 
+        for instruction in cmds:
+            for cmd in instruction["list"]:
+                self.builder.call("minecraft.post", cmd)
         return cmds
 
     def make_left_side(self):
-        cmds = []
-        cmds.extend(self.make_left_bouncer())
-        cmds.append(self.make_left_wall())
-        cmds.extend(self.make_left_cover())
-        return cmds
+        self.make_left_bouncer()
+        self.make_left_wall()
+        self.make_left_cover()
 
     def make_left_bouncer(self):
 
@@ -436,6 +375,9 @@ class Board:
                 zone = mc.Zone((self.x1, i, self.z1 - 2), (self.x2, i, self.z1 - 2))
                 cmds.append(mc._set_zone(zone, self.left_bouncer["block"], "replace"))
 
+        for instruction in cmds:
+            for cmd in instruction["list"]:
+                self.builder.call("minecraft.post", cmd)
         return cmds
 
     def make_left_wall(self):
@@ -447,6 +389,8 @@ class Board:
         }
 
         cmds = mc._set_zone(self.left_wall["zone"], self.left_wall["block"], "replace")
+        for instruction in cmds["list"]:
+            self.builder.call("minecraft.post", instruction)
         return cmds
 
     def make_left_cover(self):
@@ -467,6 +411,9 @@ class Board:
                 zone = mc.Zone((self.x1, i, self.z1), (self.x2, i, self.z1))
                 cmds.append(mc._set_zone(zone, self.left_cover["block"], "replace"))
 
+        for instruction in cmds:
+            for cmd in instruction["list"]:
+                self.builder.call("minecraft.post", cmd)
         return cmds
 
     def make_bottom_bar(self):
@@ -480,33 +427,41 @@ class Board:
         cmds = mc._set_zone(
             self.bottom_bar["zone"], self.bottom_bar["block"], "replace"
         )
+        for instruction in cmds["list"]:
+            self.builder.call("minecraft.post", instruction)
         return cmds
 
 
 class Arena:
-    def __init__(self, board):
+    def __init__(self, board, builder):
         self.board = board
 
         x = self.board.play_zone.pos2.y + 1
         y = self.board.play_zone.pos2.z + 1
+        self.builder = builder
+
+        self.DEFAULT_TYPE = Peg
 
         self.plate = []
 
         for i in range(x):
             self.plate.append([])
             for j in range(y):
-                self.plate[i].append(Empty(i, j))
+                self.plate[i].append(Empty(i, j, self.builder))
+                
+        
+        
+        
 
-    def deconstruct(self):
-        cmds = []
+    async def deconstruct(self):
+
+        print("o---> Deconstructing arena")
+
         for i in range(len(self.plate)):
             for j in range(len(self.plate[i])):
-                cmd = self.replace_tile(Empty(i, j))
-                cmds.extend(cmd)
+                await self.replace_tile(Empty(i, j, self.builder))
 
-        return cmds
-
-    def replace_random(self):
+    async def replace_random(self):
         def check_distance(coord, pegs, distance=4):
             for peg in pegs:
                 if (
@@ -548,55 +503,81 @@ class Arena:
             if tried > max_tries:
                 break
 
+        if len(pegs) <= 1:
+            print("Fix this error")
+            return []
+
         chosen = randrange(0, len(pegs) - 1)
 
         x2 = pegs[chosen].x
         y2 = pegs[chosen].y
 
-        cmds = []
-        cmds.extend(self.replace_tile(Empty(x2, y2)))
-        cmds.extend(self.replace_tile(Peg(x1, y1)))
-        return cmds
+        await self.replace_tile(Empty(x2, y2, self.builder))
+        cmd = f'particle minecraft:witch {self.board.env["origin_x"]} {x2} {y2} 1.2 1.2 1.2 0.5 400 force'
+        self.builder.call("minecraft.post", cmd)
 
-    def replace_tile(self, tile):
+        await self.replace_tile(Peg(x1, y1, self.builder))
+        cmd = f'particle minecraft:witch {self.board.env["origin_x"]} {x1} {y1} 1.2 1.2 1.2 0.5 400 force'
+        self.builder.call("minecraft.post", cmd)
 
-        cmds = []
+    async def replace_tile(self, tile):
 
         x = tile.x
         y = tile.y
+
         tile.board = self.board
 
         old_tile = self.plate[x][y]
         cmd = old_tile.remove()
-        cmds.extend(cmd)
+
+        cmds = []
+        if cmd:
+            for instruction in cmd:
+                for cmd in instruction["list"]:
+                    cmds.append(cmd)
+                    await self.builder.call("minecraft.post", cmd)
 
         self.plate[x][y] = tile
         cmd = tile.place()
-        cmds.extend(cmd)
 
-        return cmds
+        if cmd:
+            for instruction in cmd:
+                for cmd in instruction["list"]:
+                    cmds.append(cmd)
+                    await self.builder.call("minecraft.post", cmd)
 
-    def remove_tile_line(self, y, type=None):
+        nest = mc.functions.base_functions.nest_commands(cmds)
+        coords = mc.BlockCoordinates(self.board.env["origin_x"] + 5, x, y)
+        cmd = mc.functions.base_functions.format_nest(coords, nest)
+        # print(cmd, len(cmd))
+        # ret = await self.builder.call("minecraft.post", cmd)
+        # print("ret: ", ret)
+
+    def remove_tile_line(self, y, tile_type=None):
+        if tile_type is None:
+            tile_type = DEFAULT_TILE_TYPE
+
         cmds = []
 
         for i in range(len(self.plate[y])):
-            cmds.extend(self.remove_tile(y, i, type))
+            self.remove_tile(y, i, tile_type)
 
-        return cmds
+        print(f"Removing line of tiles at y={y}")
 
-    def remove_tile(self, x, y, type=None):
-        cmds = []
-
-        if isinstance(self.plate[x][y], type) or type == None:
-
-            cmd = self.replace_tile(Empty(x, y))
-            cmds.extend(cmd)
-
-        return cmds
-
-    def place_line(self, y, spacing=8, type=None, limit=None, even_policy="random"):
+    async def remove_tile(self, x, y, tile_type=None):
+        if tile_type is None:
+            tile_type = DEFAULT_TILE_TYPE
 
         cmds = []
+        print(f"Removing tile at {x} {y}")
+        if isinstance(self.plate[x][y], tile_type) or tile_type == None:
+            await self.replace_tile(Empty(x, y))
+
+    async def place_line(
+        self, y, spacing=8, tile_type=None, limit=None, even_policy="random"
+    ):
+        if tile_type is None:
+            tile_type = DEFAULT_TILE_TYPE
 
         peg_line = []
 
@@ -625,7 +606,7 @@ class Arena:
             elif even_policy == "right":
                 right_padding += 1
 
-        class_lookup = {"class_name": type}
+        class_lookup = {"class_name": tile_type}
         casted_type = class_lookup["class_name"]
 
         for _ in range(left_padding):
@@ -633,29 +614,35 @@ class Arena:
 
         for _ in range(n_to_place):
             peg_line.append(
-                casted_type(y, len(peg_line) + self.board.env["side_offset"])
+                casted_type(y, len(peg_line) + self.board.env["side_offset"], self.builder)
             )
             for _ in range(spacing - 1):
-                peg_line.append(Empty(y, len(peg_line) + self.board.env["side_offset"]))
+                peg_line.append(Empty(y, len(peg_line) + self.board.env["side_offset"], self.builder))
 
-        peg_line.append(casted_type(y, len(peg_line) + self.board.env["side_offset"]))
+        peg_line.append(casted_type(y, len(peg_line) + self.board.env["side_offset"], self.builder))
 
         for _ in range(left_padding):
-            peg_line.append(Empty(y, len(peg_line) + self.board.env["side_offset"]))
+            peg_line.append(Empty(y, len(peg_line) + self.board.env["side_offset"], self.builder))
 
         cmds = []
         for tile in peg_line:
-            cmd = self.replace_tile(tile)
-            cmds.extend(cmd)
+            await self.replace_tile(tile)
 
-        return cmds
+        print(f"o---> Placing line of tiles with y={y} with spacing={spacing}")
 
-    def place_grid(
-        self, x_spacing=8, y_spacing=8, type=None, limit=None, even_policy="random"
+    async def place_grid(
+        self,
+        x_spacing=10,
+        y_spacing=10,
+        tile_type=None,
+        limit=None,
+        even_policy="random",
     ):
-        cmds = []
 
-        peg_grid = []
+        if tile_type is None:
+            tile_type = DEFAULT_TILE_TYPE
+
+        await self.deconstruct()
 
         height = (
             len(self.plate)
@@ -686,73 +673,71 @@ class Arena:
             elif even_policy == "right":
                 bottom_padding += 1
 
-        class_lookup = {"class_name": type}
+        class_lookup = {"class_name": tile_type}
         casted_type = class_lookup["class_name"]
 
         y = 0
         for _ in range(top_padding):
-            peg_grid.extend(
-                self.place_line(
-                    y + self.board.env["bottom_offset"],
-                    y_spacing,
-                    Empty,
-                    limit,
-                    even_policy,
-                )
-            )
-            y += 1
-
-        for _ in range(n_to_place):
-            peg_grid.extend(
-                self.place_line(
-                    y + self.board.env["bottom_offset"],
-                    y_spacing,
-                    casted_type,
-                    limit,
-                    even_policy,
-                )
-            )
-            y += 1
-            for _ in range(x_spacing - 1):
-                peg_grid.extend(
-                    self.place_line(
-                        y + self.board.env["bottom_offset"],
-                        y_spacing,
-                        Empty,
-                        limit,
-                        even_policy,
-                    )
-                )
-                y += 1
-
-        peg_grid.extend(
-            self.place_line(
+            await self.place_line(
                 y + self.board.env["bottom_offset"],
                 y_spacing,
-                Peg,
+                Empty,
                 limit,
                 even_policy,
             )
-        )
-        y += 1
 
-        for _ in range(top_padding):
-            peg_grid.extend(
-                self.place_line(
+            y += 1
+
+        for _ in range(n_to_place):
+            await self.place_line(
+                y + self.board.env["bottom_offset"],
+                y_spacing,
+                casted_type,
+                limit,
+                even_policy,
+            )
+
+            y += 1
+            for _ in range(x_spacing - 1):
+
+                await self.place_line(
                     y + self.board.env["bottom_offset"],
                     y_spacing,
                     Empty,
                     limit,
                     even_policy,
                 )
+
+                y += 1
+
+        await self.place_line(
+            y + self.board.env["bottom_offset"],
+            y_spacing,
+            Peg,
+            limit,
+            even_policy,
+        )
+
+        y += 1
+
+        for _ in range(top_padding):
+            await self.place_line(
+                y + self.board.env["bottom_offset"],
+                y_spacing,
+                Empty,
+                limit,
+                even_policy,
             )
             y += 1
 
-        cmds = peg_grid
-        return cmds
+        print(f"o---> Placing grid of tiles with x={x_spacing} y={y_spacing}")
 
-    def random_tiles(self, spacing=8, limit=100, type=None):
+    async def random_tiles(self, spacing=6, limit=100, tile_type=None):
 
+        if tile_type is None:
+            tile_type = DEFAULT_TILE_TYPE
+
+        await self.deconstruct()
         cmds = []
 
         def check_distance(coord, pegs, distance=3):
@@ -787,18 +772,19 @@ class Arena:
 
             tried += 1
 
-        class_lookup = {"class_name": type}
+        class_lookup = {"class_name": tile_type}
         casted_type = class_lookup["class_name"]
 
         for peg in list_of_pegs:
-            cmds.extend(self.replace_tile(casted_type(peg[0], peg[1])))
+            await self.replace_tile(casted_type(peg[0], peg[1], self.builder))
 
-        return cmds
+        print(f"o---> Placing random tiles with spacing={spacing} limit={limit}")
 
 
 class Tile:
-    def __init__(self, x, y, board=None):
-        self.board = board
+    def __init__(self, x, y, builder):
+        self.builder = builder
+        self.board = builder.board
         self.x = x
         self.y = y
 
@@ -850,7 +836,9 @@ class Peg(Tile):
             "coords": coords,
             "replace": self.board.env["background_block"],
         }
-        cmds.append(mc._set_block(coords, peg_block, "replace"))
+
+        cmd = mc._set_block(coords, peg_block, "replace")
+        cmds.append(cmd)
 
         # Peg particle handler
         particle_block = mc.Block(
@@ -883,6 +871,65 @@ class Peg(Tile):
         cmds.append(mc._set_zone(zone, self.board.env["peg_block"], "replace"))
 
         return cmds
+
+
+DEFAULT_TILE_TYPE = Peg
+
+class FooDar(Tile):
+        def __init__(self, x, y, builder):
+            
+            print("creating a foooodar")
+            self.builder = builder
+            super().__init__(x, y, builder)
+            
+            print("creating a foooodar")
+            
+            self.x = self.board.env['origin_x'] + self.board.env['depth']
+            self.y = self.board.env['origin_y'] + self.board.env['height']
+            self.z = self.board.env['origin_z'] + self.board.env['width']
+            
+            self.builder.subscribe(self.up, 'foodar.up')
+            self.builder.subscribe(self.down, 'foodar.down')
+            self.builder.subscribe(self.left, 'foodar.left')
+            self.builder.subscribe(self.right, 'foodar.right')
+            
+       
+            
+        def place(self):
+            self.builder.call('minecraft.post', f"setblock {self.x} {self.y} {self.z} red_concrete")
+            block = mc.Block("stone")
+            coords = mc.BlockCoordinates(self.x, self.y, self.z)
+            
+            self.block_to_remove = {
+                "block": block,
+                "coords": coords,
+                "replace": self.board.env["background_block"],
+        }
+            
+        
+            
+            
+        def up(self):
+            print("hellozer")
+            new_y = self.y + 1
+            if new_y < self.board.env['height'] - self.board.env['top_offset']:
+                self.move(self.x, new_y, self.z)
+        def down(self):
+            new_y = self.y - 1
+            if new_y >= (0 + self.board.env['bottom_offset']):
+                self.move(self.x, new_y, self.z)
+                
+        def right(self):
+            new_z = self.z + 1
+            if new_z >= 0 + self.board.env['bottom_offset']:
+                self.move(self.x, self.y, new_z)        
+        def left(self):
+            new_z = self.z - 1
+            if new_z < self.board.env['origin_z'] + self.board.env['height'] :
+                self.move(self.x, self.y, new_z)
+        
+                    
+        
 
 
 class Empty(Tile):

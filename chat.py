@@ -42,16 +42,24 @@ class Chat(ApplicationSession):
 
                     self.publish("chat.message", pickle.dumps(message))
 
-        while True:
-            try:
-                chat = pytchat.create(
-                   video_id=self.stream_url, interruptable=False, hold_exception=False
-                )
-                chat_query()
-            except:
-                print("Chat restaart")
+        # chat = pytchat.create(
+        #     video_id=self.stream_url, interruptable=False, hold_exception=False
+        # )
+        chat = pytchat.create(
+            video_id=self.stream_url, interruptable=True, hold_exception=False
+        )
+        try:
+            chat_query()
+        except Exception as e:
+            raise e
 
 
 if __name__ == "__main__":
-    runner = ApplicationRunner("ws://127.0.0.1:8080/ws", "realm1")
-    runner.run(Chat)
+    while True:
+        try:
+            runner = ApplicationRunner("ws://127.0.0.1:8080/ws", "realm1")
+            runner.run(Chat)
+        except Exception as e:
+            print(e)
+            print("Retrying in 3 seconds...")
+            asyncio.sleep(3)

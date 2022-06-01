@@ -2,6 +2,8 @@ from distutils.command.build import build
 
 
 def sanitize_very_strict(str):
+    if "NAKED" in str:
+        return "notnakedbot"
     return "".join(
         c
         for c in str

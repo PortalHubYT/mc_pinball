@@ -17,6 +17,54 @@ NAME_WIDTH = 50
 
 
 class Spawner(ApplicationSession):
+    
+    class FooDar():
+        def __init__(self):
+            self.parent = super()
+            self.x = self.parent.gs['origin_x'] + self.parent.gs['depth']
+            self.y = self.parent.gs['origin_y'] + self.parent.gs['height']
+            self.z = self.parent.gs['origin_z'] + self.parent.gs['width']
+            
+            self.place()
+            
+            self.parent.subscribe(self.up, 'foodar.up')
+            self.parent.subscribe(self.down, 'foodar.down')
+            self.parent.subscribe(self.left, 'foodar.left')
+            self.parent.subscribe(self.right, 'foodar.right')
+            
+        def place(self):
+            self.parent.call('minecraft.post', f"setblock {self.x} {self.y} {self.z} red_concrete")
+            pass
+        def remove(self):
+            self.parent.call('minecraft.post', f"setblock {self.x} {self.y} {self.z} air")
+            pass
+        
+        def up(self):
+            print("hellozer")
+            new_y = self.y + 1
+            if new_y < self.parent.gs['height'] - self.parent.gs['top_offset']:
+                self.move(self.x, new_y, self.z)
+        def down(self):
+            new_y = self.y - 1
+            if new_y >= (0 + self.parent.gs['bottom_offset']):
+                self.move(self.x, new_y, self.z)
+                
+        def right(self):
+            new_z = self.z + 1
+            if new_z >= 0 + self.parent.gs['bottom_offset']:
+                self.move(self.x, self.y, new_z)        
+        def left(self):
+            new_z = self.z - 1
+            if new_z < self.gs.parent['origin_z'] + self.parent.gs['height'] :
+                self.move(self.x, self.y, new_z)
+        
+                    
+        def move(self, new_x, new_y, new_z):
+            self.remove(self.x, self.y, self.z)
+            self.x = new_x
+            self.y = new_y
+            self.z = new_z
+            self.place(self.x, self.y, self.z)
             
     async def onJoin(self, details):
         self.gs = await self.call("gamestate.get")
@@ -25,13 +73,13 @@ class Spawner(ApplicationSession):
 
         def get_random_spawning_point():
             x = random.randrange(0, self.gs["width"] - 1)
-            # y = 
+            # y = self.gs["height"]
             y = random.randrange(int(self.gs["height"] * 0.7), self.gs["height"])
             return (x, y)
 
         async def translate_coords(x, y):
             self.gs = await self.call("gamestate.get")
-            return f"{(self.gs['origin_x'] + self.gs['depth']) / 2} {self.gs['height']} {x + self.gs['origin_z']}"
+            return f"{(self.gs['origin_x'] + self.gs['depth']) / 2} {y + self.gs['origin_y'] + 3} {x + self.gs['origin_z']}"
 
         async def spawn_slime(
             x, y, tag, display_name="dummy", mob_type="minecraft:slime"
@@ -99,7 +147,7 @@ class Spawner(ApplicationSession):
                     mob_type,
                 )
                 print(
-                    f"o-> ({display_name[:15]}) [id: {uid}] spawned from message"
+                    f"o--> ({display_name[:15]}) [id: {uid}] spawned from message"
                 )
 
         await self.register(spawn_slime, "spawn.slime.place")

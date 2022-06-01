@@ -17,6 +17,9 @@ from math import floor
 
 
 class Console(ApplicationSession):
+    
+        
+        
     async def onJoin(self, details):
         async def peg_line(*args):
             try:
@@ -82,6 +85,16 @@ class Console(ApplicationSession):
 
         async def peg_replace_random(*args):
             await self.call("builder.arena.tile.replace_random")
+            
+        async def up(*args):
+            self.publish('foodar.up')
+        async def down(*args):
+            self.publish('foodar.down')
+                
+        async def right(*args):
+            self.publish('foodar.right')
+        async def left(*args):
+            self.publish('foodar.left')
 
         async def board_query(*args):
             try:
@@ -234,6 +247,12 @@ class Console(ApplicationSession):
             await remove_name(args)
             await remove_alive(args)
 
+        async def game_next_round():
+            self.publish("game.round.next")
+
+        async def place_camera():
+            self.call("builder.camera.place")
+
         architecture = {
             "builder": {
                 "arena": {
@@ -281,8 +300,21 @@ class Console(ApplicationSession):
                     "remove": remove_alive,
                     "remove_all": None,
                 },
-                "remove_all": None,
+                "remove_all": remove_all,
             },
+            "game": {"next": {"round": game_next_round}},
+            "camera": {
+                "place": place_camera,
+            },
+            "score": {
+                "reset": None
+            },
+            "foodar": {
+                "up": up,
+                "down": down,
+                "left": left,
+                "right": right,
+            }
         }
 
         cursor = []
@@ -387,9 +419,11 @@ class Console(ApplicationSession):
                             link = place(cursor)
 
                     continue
+                
+           
 
             except Exception as e:
-                print(f"Exception: [{e}]")
+                print(f"Exception: [{e}{dir(e)}]")
                 continue
 
 
